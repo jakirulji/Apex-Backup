@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,10 +50,13 @@ import com.apex.backup.inventory.PackageApkExporter
 import com.apex.backup.inventory.PackageInventory
 import com.apex.backup.security.BackupContainer
 import com.apex.backup.security.BackupFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,6 +97,8 @@ private fun ApexBackupApp() {
 
     var verifyPassphrase by remember { mutableStateOf("") }
     var verifyBusy by remember { mutableStateOf(false) }
+    var verifyProgressBytes by remember { mutableLongStateOf(0L) }
+    val verifyBytesCounter = remember { AtomicLong(0L) }
     var verifyMessage by remember { mutableStateOf<String?>(null) }
     var verifyUri by remember { mutableStateOf<Uri?>(null) }
 
@@ -153,6 +159,15 @@ private fun ApexBackupApp() {
     ) { uri: Uri? ->
         verifyUri = uri
         verifyMessage = if (uri == null) null else "Backup selected. Enter its passphrase and verify."
+    }
+
+    LaunchedEffect(verifyBusy) {
+        if (verifyBusy) {
+            while (true) {
+                verifyProgressBytes = verifyBytesCounter.get()
+                delay(300)
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -421,28 +436,32 @@ private fun ApexBackupApp() {
                             if (uri != null) {
                                 scope.launch {
                                     verifyBusy = true
+                                    verifyBytesCounter.set(0L)
+                                    verifyProgressBytes = 0L
                                     verifyMessage = "Verifying encryption and file integrity…"
                                     val password = verifyPassphrase.toCharArray()
-                                    val result = withContext(Dispatchers.IO) {
-                                        runCatching {
+                                    try {
+                                        val summary = withContext(Dispatchers.IO) {
                                             val input = context.contentResolver.openInputStream(uri)
                                                 ?: error("Could not open the selected backup.")
                                             input.use {
-                                                BackupContainer.verify(it, password)
+                                                BackupContainer.verify(it, password) { bytesRead ->
+                                                    verifyBytesCounter.set(bytesRead)
+                                                }
                                             }
                                         }
+                                        verifyMessage = "Verified: ${summary.fileCount} files, " +
+                                            "${formatBytes(summary.totalBytes)}. Authentication and SHA-256 checks passed."
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        verifyMessage = "Verification failed: ${error.message ?: "unknown error"}"
+                                    } finally {
+                                        password.fill('\\u0000')
+                                        verifyPassphrase = ""
+                                        verifyProgressBytes = verifyBytesCounter.get()
+                                        verifyBusy = false
                                     }
-                                    verifyPassphrase = ""
-                                    verifyBusy = false
-                                    verifyMessage = result.fold(
-                                        onSuccess = {
-                                            "Verified: ${it.fileCount} files, ${formatBytes(it.totalBytes)}. " +
-                                                "Authentication and SHA-256 checks passed."
-                                        },
-                                        onFailure = {
-                                            "Verification failed: ${it.message ?: "unknown error"}"
-                                        }
-                                    )
                                 }
                             }
                         },
@@ -450,7 +469,13 @@ private fun ApexBackupApp() {
                     ) {
                         Text("Verify backup")
                     }
-                    if (verifyBusy) CircularProgressIndicator()
+                    if (verifyBusy) {
+                        CircularProgressIndicator()
+                        Text(
+                            "Reading and authenticating: ${formatBytes(verifyProgressBytes)} processed",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     verifyMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     Text(
                         "Use a unique passphrase and keep it somewhere safe. The app cannot recover " +
