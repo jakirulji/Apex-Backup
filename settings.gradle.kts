@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Apex Backup"
-include(":app")
+include(":app", ":test-lab")
