@@ -70,7 +70,11 @@ internal object BackupContainerV3 {
                 GCMParameterSpec(TAG_BITS, wrapNonce)
             )
             wrapCipher.updateAAD(prefix)
-            val wrappedKeyset = wrapCipher.doFinal(serializedKeyset)
+            val wrappedKeyset = try {
+                wrapCipher.doFinal(serializedKeyset)
+            } finally {
+                serializedKeyset.fill(0)
+            }
             val header = prefix + intBytes(wrappedKeyset.size) + wrappedKeyset
             val streamingAead = keyset.getPrimitive(RegistryConfiguration.get(), StreamingAead::class.java)
             val createdAt = java.time.Instant.now().toString()
