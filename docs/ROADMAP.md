@@ -20,7 +20,7 @@
 - [x] Android project foundation and CI.
 - [x] Permanent JKS signing configured.
 - [x] CI validates the signed release APK.
-- [x] CI publishes one user-facing APK: \`Apex Backup.apk\`.
+- [x] CI publishes one user-facing APK: `Apex Backup.apk`.
 - [x] Test/debug APK is not uploaded as a separate artifact.
 
 ## M1 — Device/root/storage diagnostics
