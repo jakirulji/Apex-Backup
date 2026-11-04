@@ -1,7 +1,7 @@
 # Apex Backup Container Format
 
 **Status:** Version 1 implementation  
-**Extension:** \`.apexbackup\`  
+**Extension:** `.apexbackup`  
 **Purpose:** Portable authenticated encryption container for backup payloads.
 
 ## v1 wire format
@@ -10,14 +10,14 @@ All integer fields are big-endian.
 
 | Field | Size | Value |
 |---|---:|---|
-| Magic | 8 bytes | ASCII \`APEXBKUP\` |
-| Format version | 4 bytes | \`1\` |
-| KDF identifier | 1 byte | \`1\` = Argon2id |
-| Argon2id iterations | 4 bytes | \`3\` |
-| Argon2id memory | 4 bytes | \`65536\` KiB |
-| Argon2id parallelism | 4 bytes | \`1\` |
-| Salt length | 1 byte | \`16\` |
-| Nonce length | 1 byte | \`12\` |
+| Magic | 8 bytes | ASCII `APEXBKUP` |
+| Format version | 4 bytes | `1` |
+| KDF identifier | 1 byte | `1` = Argon2id |
+| Argon2id iterations | 4 bytes | `3` |
+| Argon2id memory | 4 bytes | `65536` KiB |
+| Argon2id parallelism | 4 bytes | `1` |
+| Salt length | 1 byte | `16` |
+| Nonce length | 1 byte | `12` |
 | Salt | 16 bytes | Cryptographically random |
 | GCM nonce | 12 bytes | Cryptographically random |
 | Ciphertext | Remaining bytes | AES-256-GCM encrypted ZIP payload, including 128-bit tag |
@@ -39,12 +39,12 @@ The complete header, from magic through nonce, is supplied as AES-GCM additional
 
 The ZIP stream contains selected payload files and one final manifest:
 
-\`\`\`
+```
 apps/<package>/<version>/base.apk
 apps/<package>/<version>/split-1.apk
 ...
 META-INF/apex-manifest.txt
-\`\`\`
+```
 
 The manifest records format marker, creation timestamp, entry count, and for each payload file its Base64URL-encoded relative path, byte length and SHA-256 digest. The manifest is inside the authenticated ciphertext.
 
