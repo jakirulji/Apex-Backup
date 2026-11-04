@@ -229,7 +229,7 @@ class BackupContainerTest {
                 "created_at=" + encoder.encodeToString("2026-01-01T00:00:00Z".toByteArray()) + "\n" +
                 "entry_count=1\n" +
                 "entry.0=" + encoder.encodeToString("apps/legacy/base.apk".toByteArray()) +
-                "|13|" + digest + "\n"
+                "|14|" + digest + "\n"
             zip.putNextEntry(ZipEntry("META-INF/apex-manifest.txt").apply { time = 0L })
             zip.write(manifest.toByteArray(StandardCharsets.UTF_8))
             zip.closeEntry()
