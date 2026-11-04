@@ -118,8 +118,12 @@ object RootDiagnosticsRunner {
         )
     }
 
-    internal fun isRootIdentity(output: String): Boolean =
-        Regex("""\buid=0(?:\(|\s)""").containsMatchIn(output)
+    internal fun isRootIdentity(output: String): Boolean {
+        val identity = output.trimStart()
+        return identity.startsWith("uid=0(") ||
+            identity.startsWith("uid=0 ") ||
+            identity == "uid=0"
+    }
 
     private data class CommandResult(
         val exitCode: Int,
