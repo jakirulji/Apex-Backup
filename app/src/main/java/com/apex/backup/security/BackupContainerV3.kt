@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -89,6 +90,8 @@ internal object BackupContainerV3 {
             destination.flush()
             val encrypted = streamingAead.newEncryptingStream(destination, header)
             ZipOutputStream(encrypted).use { zip ->
+                // APKs are ZIP containers already; skip redundant compression to save CPU.
+                zip.setLevel(Deflater.NO_COMPRESSION)
                 files.forEach { file ->
                     zip.putNextEntry(ZipEntry(file.archivePath).apply { time = 0L })
                     val digest = MessageDigest.getInstance("SHA-256")
