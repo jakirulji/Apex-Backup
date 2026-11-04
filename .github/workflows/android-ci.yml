@@ -1,0 +1,13 @@
+name: Android CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  manual-trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain branch selection
+        run: |
+          echo "This default-branch workflow enables the Run workflow button."
+          echo "For the Android build, select the dev branch in the Actions branch selector."
