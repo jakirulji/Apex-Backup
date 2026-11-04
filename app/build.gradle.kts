@@ -6,6 +6,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val signingStorePath = providers.environmentVariable("APEX_KEYSTORE_PATH").orNull
+val signingStorePassword = providers.environmentVariable("APEX_KEYSTORE_PASSWORD").orNull
+val signingKeyAlias = providers.environmentVariable("APEX_KEY_ALIAS").orNull
+val signingKeyPassword = providers.environmentVariable("APEX_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    signingStorePath,
+    signingStorePassword,
+    signingKeyAlias,
+    signingKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.apex.backup"
     compileSdk = 36
@@ -19,8 +30,30 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(signingStorePath!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+                storeType = "JKS"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            // Use the permanent app key when available so test APKs can update releases.
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
