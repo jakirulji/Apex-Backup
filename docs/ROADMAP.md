@@ -57,7 +57,7 @@ M2 APK ZIP export is not a complete application backup.
 - [x] Add v3 Tink AES-256-GCM-HKDF Streaming AEAD with a fresh per-backup keyset wrapped by the Argon2id-derived password key.
 - [x] Keep v1/v2 read compatibility; write all new backups as v3.
 - [x] Authenticate the complete stream and final segment; reject truncation and segment tampering.
-- [x] Use bounded 256 KiB I/O buffers and a 1 MiB authenticated segment profile without a software throughput cap.
+- [x] Use heap-adaptive bounded I/O buffers (256 KiB–4 MiB) and a 1 MiB authenticated segment profile without a software throughput cap.
 - [x] Reject unsafe paths, duplicate entries, unsupported KDF parameters and malformed manifests.
 - [x] Add UI to create encrypted APK containers and verify an existing container through SAF.
 - [ ] CI tests, lint, signed release build and signature verification.
