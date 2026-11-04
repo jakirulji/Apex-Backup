@@ -21,6 +21,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import javax.crypto.Cipher
+import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
@@ -43,7 +44,7 @@ class BackupContainerException(message: String, cause: Throwable? = null) :
  * The plaintext payload is a ZIP stream with payload files and a final authenticated manifest.
  */
 object BackupContainer {
-    const val FORMAT_VERSION = 1
+    const val FORMAT_VERSION = 2
     const val FILE_EXTENSION = ".apexbackup"
 
     private val MAGIC = "APEXBKUP".toByteArray(StandardCharsets.US_ASCII)
@@ -53,6 +54,7 @@ object BackupContainer {
     private const val ARGON2_PARALLELISM = 1
     private const val SALT_LENGTH = 16
     private const val NONCE_LENGTH = 12
+    private const val PASSWORD_VERIFIER_LENGTH = 16
     private const val KEY_LENGTH = 32
     private const val TAG_LENGTH_BITS = 128
     private const val MANIFEST_PATH = "META-INF/apex-manifest.txt"
@@ -71,8 +73,9 @@ object BackupContainer {
 
         val salt = ByteArray(SALT_LENGTH).also(random::nextBytes)
         val nonce = ByteArray(NONCE_LENGTH).also(random::nextBytes)
-        val header = buildHeader(salt, nonce)
         val key = deriveKey(passphrase, salt)
+        val passwordVerifier = createPasswordVerifier(key, salt)
+        val header = buildHeader(salt, nonce, passwordVerifier)
         val createdAt = java.time.Instant.now().toString()
         val records = ArrayList<EntryRecord>(files.size)
         var totalBytes = 0L
@@ -141,6 +144,15 @@ object BackupContainer {
         val headerData = readHeader(trackedSource)
         val key = deriveKey(passphrase, headerData.salt)
         try {
+            if (headerData.version >= 2) {
+                val expectedVerifier = createPasswordVerifier(key, headerData.salt)
+                val storedVerifier = headerData.passwordVerifier
+                    ?: throw BackupContainerException("Password verifier is missing.")
+                val matches = MessageDigest.isEqual(expectedVerifier, storedVerifier)
+                expectedVerifier.fill(0)
+                if (!matches) throw BackupContainerException("Wrong passphrase.")
+            }
+
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(
                 Cipher.DECRYPT_MODE,
@@ -211,7 +223,7 @@ object BackupContainer {
                 }
             }
             return BackupSummary(
-                FORMAT_VERSION,
+                headerData.version,
                 parsed.createdAt,
                 actual.size,
                 actual.values.sumOf { it.size }
@@ -293,9 +305,19 @@ object BackupContainer {
         }
     }
 
-    private data class Header(val encoded: ByteArray, val salt: ByteArray, val nonce: ByteArray)
+    private data class Header(
+        val encoded: ByteArray,
+        val salt: ByteArray,
+        val nonce: ByteArray,
+        val version: Int,
+        val passwordVerifier: ByteArray?
+    )
 
-    private fun buildHeader(salt: ByteArray, nonce: ByteArray): ByteArray {
+    private fun buildHeader(
+        salt: ByteArray,
+        nonce: ByteArray,
+        passwordVerifier: ByteArray
+    ): ByteArray {
         val bytes = ByteArrayOutputStream()
         DataOutputStream(bytes).use { out ->
             out.write(MAGIC)
@@ -308,6 +330,7 @@ object BackupContainer {
             out.writeByte(nonce.size)
             out.write(salt)
             out.write(nonce)
+            out.write(passwordVerifier)
         }
         return bytes.toByteArray()
     }
@@ -328,7 +351,7 @@ object BackupContainer {
             val saltLength = data.readUnsignedByte()
             val nonceLength = data.readUnsignedByte()
 
-            if (version != FORMAT_VERSION || kdf != KDF_ARGON2ID ||
+            if ((version != 1 && version != FORMAT_VERSION) || kdf != KDF_ARGON2ID ||
                 iterations != ARGON2_ITERATIONS || memory != ARGON2_MEMORY_KIB ||
                 parallelism != ARGON2_PARALLELISM ||
                 saltLength != SALT_LENGTH || nonceLength != NONCE_LENGTH
@@ -339,11 +362,31 @@ object BackupContainer {
             val nonce = ByteArray(nonceLength)
             DataInputStream(source).readFully(salt)
             DataInputStream(source).readFully(nonce)
-            return Header(fixed + salt + nonce, salt, nonce)
+            val verifier = if (version >= 2) {
+                ByteArray(PASSWORD_VERIFIER_LENGTH).also { DataInputStream(source).readFully(it) }
+            } else {
+                null
+            }
+            return Header(fixed + salt + nonce + (verifier ?: ByteArray(0)), salt, nonce, version, verifier)
         } catch (error: BackupContainerException) {
             throw error
         } catch (error: Exception) {
             throw BackupContainerException("Invalid or incomplete backup header.", error)
+        }
+    }
+
+    private fun createPasswordVerifier(key: ByteArray, salt: ByteArray): ByteArray {
+        // Domain-separate a dedicated HMAC key from the AES encryption key.
+        val verifierKey = MessageDigest.getInstance("SHA-256").digest(
+            key + "APEX-BACKUP-PASSWORD-VERIFIER-KEY-V2".toByteArray(StandardCharsets.US_ASCII)
+        )
+        return try {
+            val mac = Mac.getInstance("HmacSHA256")
+            mac.init(SecretKeySpec(verifierKey, "HmacSHA256"))
+            mac.update("APEX-BACKUP-PASSWORD-VERIFIER-V2".toByteArray(StandardCharsets.US_ASCII))
+            mac.doFinal(salt).copyOf(PASSWORD_VERIFIER_LENGTH)
+        } finally {
+            verifierKey.fill(0)
         }
     }
 
