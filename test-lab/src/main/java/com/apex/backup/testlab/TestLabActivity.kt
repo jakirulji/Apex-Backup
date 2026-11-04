@@ -63,8 +63,7 @@ class TestLabActivity : Activity() {
             .putString("known_value", "apex-test-$label-2026").commit()) {
             "$label SharedPreferences commit failed"
         }
-        val prefsFile = File(File(context.applicationInfo.dataDir, "shared_prefs"),
-            "apex_backup_test_lab.xml")
+        val prefsFile = File(File(context.dataDir, "shared_prefs"), "apex_backup_test_lab.xml")
         report += describeFile(prefsFile, "$label SharedPreferences")
         val database = context.getDatabasePath("apex_lab.db")
         database.parentFile?.mkdirs()
