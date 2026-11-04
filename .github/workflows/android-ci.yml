@@ -70,7 +70,8 @@ jobs:
         run: gradle --no-daemon assembleDebug
 
       - name: Verify debug APK signature
-        run: apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+        shell: bash
+        run: "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
 
       - name: Assemble release APK
         if: ${{ env.KEYSTORE_BASE64 != '' }}
@@ -78,7 +79,8 @@ jobs:
 
       - name: Verify release APK signature
         if: ${{ env.KEYSTORE_BASE64 != '' }}
-        run: apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+        shell: bash
+        run: "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
       - name: Prepare test artifact
         run: cp app/build/outputs/apk/debug/app-debug.apk test.apk
