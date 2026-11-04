@@ -93,7 +93,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("org.bouncycastle:bcprov-jdk18on:1.83")
-    implementation("com.google.crypto.tink:tink-android:1.18.0")
+    implementation("com.google.crypto.tink:tink-android:1.24.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
