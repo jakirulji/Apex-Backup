@@ -5,7 +5,6 @@ import com.google.crypto.tink.KeyTemplates
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.StreamingAead
 import com.google.crypto.tink.TinkJsonProtoKeysetFormat
-import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.streamingaead.StreamingAeadConfig
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator
 import org.bouncycastle.crypto.params.Argon2Parameters
@@ -82,7 +81,7 @@ internal object BackupContainerV3 {
                 serializedKeyset.fill(0)
             }
             val header = prefix + intBytes(wrappedKeyset.size) + wrappedKeyset
-            val streamingAead = keyset.getPrimitive(RegistryConfiguration.get(), StreamingAead::class.java)
+            val streamingAead = keyset.getPrimitive(StreamingAead::class.java)
             val createdAt = java.time.Instant.now().toString()
             val records = ArrayList<Record>(files.size)
             var totalBytes = 0L
