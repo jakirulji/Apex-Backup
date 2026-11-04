@@ -2,7 +2,7 @@
 
 A root-capable Android backup and migration project focused on recoverability, security, and honest compatibility reporting.
 
-> **Development status:** early foundation stage. Backup and restore functionality is not implemented yet. Do not use this app to protect important data until the relevant features have been implemented, tested, and documented.
+> **Development status:** early implementation stage. M1 device/root diagnostics are implemented on `dev`. Backup and restore functionality is not implemented yet. Do not use this app to protect important data until the relevant features have been implemented, tested, and documented.
 
 ## Goals
 
@@ -15,20 +15,19 @@ A root-capable Android backup and migration project focused on recoverability, s
 ## Current status
 
 - [x] Master project plan committed.
-- [x] Repository reconnaissance completed.
-- [x] Initial Android application skeleton added on `dev`.
-- [ ] Root/device diagnostics.
+- [x] Initial Android application skeleton and CI baseline.
+- [x] Permanent JKS signing configured; CI verifies matching debug/release certificates.
+- [x] M1 device information, internal storage information, and explicit root diagnostics UI.
+- [ ] On-device M1 validation on Redmi Note 9 Pro / Evolution X 17 / Magisk.
 - [ ] Package inventory and APK export.
 - [ ] Encrypted backup container.
 - [ ] App-data backup and controlled restore.
 
 See [Master Project Plan](docs/MASTER_PROJECT_PLAN.md), [Architecture](docs/ARCHITECTURE.md), and [Roadmap](docs/ROADMAP.md).
 
-## Build
+## Build and signing
 
-The project uses Gradle Kotlin DSL, Android Gradle Plugin, Kotlin, Jetpack Compose, and JDK 17. GitHub Actions is the initial verification environment. See the workflow in `.github/workflows/android-ci.yml`.
-
-### APK signing
+The project uses Gradle Kotlin DSL, Android Gradle Plugin, Kotlin, Jetpack Compose, and JDK 17. GitHub Actions is the initial verification environment. See `.github/workflows/android-ci.yml`.
 
 Configure these GitHub Actions repository secrets:
 
@@ -37,9 +36,17 @@ Configure these GitHub Actions repository secrets:
 - `KEY_ALIAS`: signing key alias.
 - `KEY_PASSWORD`: signing key password.
 
-The workflow decodes the keystore into the temporary GitHub runner directory; the keystore and passwords are never committed to the repository. When the secrets are present, both debug (test) and release APKs use the same permanent signing key and the same application ID (`com.apex.backup`), allowing either build to update an installation signed with that key. Pull requests without access to repository secrets can still run tests and build a debug APK using the standard debug key; branch builds and manual runs require the signing secrets.
+The workflow decodes the keystore into the temporary GitHub runner directory. The keystore and passwords are never committed. Both debug (test) and release APKs use the same permanent signing key and application ID (`com.apex.backup`) when secrets are present, allowing either build to update an installation signed with that key.
 
 Keep a secure offline backup of the original JKS file and its passwords. If the signing key is lost, future APKs signed with a different key generally cannot update existing installations.
+
+## M1 diagnostics scope
+
+- Device manufacturer/model/codename, Android/API level, security patch, build display/fingerprint and supported ABIs.
+- Internal data partition total, available and used space.
+- Root status from a bounded `su -c id` check; when granted, read-only Magisk version, SELinux mode and encryption properties.
+- Root is requested only after the user presses **Check root**.
+- No arbitrary shell input, backup, restore, partition writes or system changes.
 
 ## Safety
 
