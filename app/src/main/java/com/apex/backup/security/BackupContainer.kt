@@ -122,12 +122,12 @@ object BackupContainer {
             return BackupSummary(FORMAT_VERSION, createdAt, records.size, totalBytes)
         } catch (error: Exception) {
             throw BackupContainerException(
-                "Could not create encrypted backup: \${error.message ?: error.javaClass.simpleName}",
+                "Could not create encrypted backup: ${error.message ?: error.javaClass.simpleName}",
                 error
             )
         } finally {
             key.fill(0)
-            passphrase.fill('\\u0000')
+            passphrase.fill('\u0000')
         }
     }
 
@@ -195,14 +195,14 @@ object BackupContainer {
             }
             parsed.records.forEach { expected ->
                 val found = actual[expected.path]
-                    ?: throw BackupContainerException("Missing file: \${expected.path}")
+                    ?: throw BackupContainerException("Missing file: ${expected.path}")
                 if (found.size != expected.size ||
                     !MessageDigest.isEqual(
                         found.sha256.toByteArray(StandardCharsets.US_ASCII),
                         expected.sha256.toByteArray(StandardCharsets.US_ASCII)
                     )
                 ) {
-                    throw BackupContainerException("Integrity check failed: \${expected.path}")
+                    throw BackupContainerException("Integrity check failed: ${expected.path}")
                 }
             }
             return BackupSummary(
@@ -220,7 +220,7 @@ object BackupContainer {
             )
         } finally {
             key.fill(0)
-            passphrase.fill('\\u0000')
+            passphrase.fill('\u0000')
         }
     }
 
@@ -240,15 +240,15 @@ object BackupContainer {
                 throw BackupContainerException("Reserved or duplicate archive path.")
             }
             if (!it.source.isFile || !it.source.canRead()) {
-                throw BackupContainerException("Source file is not readable: \${it.archivePath}")
+                throw BackupContainerException("Source file is not readable: ${it.archivePath}")
             }
         }
     }
 
     private fun validateArchivePath(path: String) {
         if (path.isBlank() || path.length > MAX_PATH_LENGTH ||
-            path.startsWith("/") || path.startsWith("\\\\") ||
-            path.contains('\\\\') || path.any { it.code < 0x20 }
+            path.startsWith("/") || path.startsWith("\\") ||
+            path.contains('\\') || path.any { it.code < 0x20 }
         ) {
             throw BackupContainerException("Unsafe archive path.")
         }
@@ -342,23 +342,23 @@ object BackupContainer {
     private fun encodeManifest(createdAt: String, records: List<EntryRecord>): ByteArray {
         val encoder = Base64.getUrlEncoder().withoutPadding()
         val text = buildString {
-            append("APEX-MANIFEST-1\\n")
+            append("APEX-MANIFEST-1\n")
             append("created_at=")
             append(encoder.encodeToString(createdAt.toByteArray(StandardCharsets.UTF_8)))
-            append('\\n')
-            append("entry_count=").append(records.size).append('\\n')
+            append('\n')
+            append("entry_count=").append(records.size).append('\n')
             records.forEachIndexed { index, record ->
                 val path = encoder.encodeToString(record.path.toByteArray(StandardCharsets.UTF_8))
                 append("entry.").append(index).append('=')
                     .append(path).append('|').append(record.size).append('|')
-                    .append(record.sha256).append('\\n')
+                    .append(record.sha256).append('\n')
             }
         }
         return text.toByteArray(StandardCharsets.UTF_8)
     }
 
     private fun decodeManifest(bytes: ByteArray): Manifest {
-        val lines = bytes.toString(StandardCharsets.UTF_8).split('\\n')
+        val lines = bytes.toString(StandardCharsets.UTF_8).split('\n')
         if (lines.firstOrNull() != "APEX-MANIFEST-1") {
             throw BackupContainerException("Invalid backup manifest.")
         }
