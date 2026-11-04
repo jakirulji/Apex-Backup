@@ -131,9 +131,14 @@ object BackupContainer {
         }
     }
 
-    fun verify(source: InputStream, passphrase: CharArray): BackupSummary {
+    fun verify(
+        source: InputStream,
+        passphrase: CharArray,
+        onProgress: (Long) -> Unit = {}
+    ): BackupSummary {
         validatePassphrase(passphrase)
-        val headerData = readHeader(source)
+        val trackedSource = ProgressInputStream(source, onProgress)
+        val headerData = readHeader(trackedSource)
         val key = deriveKey(passphrase, headerData.salt)
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -144,7 +149,7 @@ object BackupContainer {
             )
             cipher.updateAAD(headerData.encoded)
 
-            val cipherInput = CipherInputStream(source, cipher)
+            val cipherInput = CipherInputStream(trackedSource, cipher)
             val zip = ZipInputStream(cipherInput)
             val actual = LinkedHashMap<String, EntryRecord>()
             var manifestBytes: ByteArray? = null
@@ -221,6 +226,36 @@ object BackupContainer {
         } finally {
             key.fill(0)
             passphrase.fill('\u0000')
+        }
+    }
+
+    private class ProgressInputStream(
+        input: InputStream,
+        private val onProgress: (Long) -> Unit
+    ) : java.io.FilterInputStream(input) {
+        private var bytesRead = 0L
+        private var nextReportAt = 1024L * 1024L
+
+        override fun read(): Int {
+            val value = super.read()
+            if (value >= 0) report(1)
+            else onProgress(bytesRead)
+            return value
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            val count = super.read(buffer, offset, length)
+            if (count > 0) report(count.toLong())
+            else if (count < 0) onProgress(bytesRead)
+            return count
+        }
+
+        private fun report(count: Long) {
+            bytesRead += count
+            if (bytesRead >= nextReportAt) {
+                onProgress(bytesRead)
+                nextReportAt = bytesRead + 1024L * 1024L
+            }
         }
     }
 
