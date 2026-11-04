@@ -108,10 +108,10 @@ private fun ApexBackupApp() {
                 }
                 exportLoading = false
                 exportMessage = if (result.error == null) {
-                    "Exported \${result.exportedApps} apps / \${result.exportedApkFiles} APK files " +
-                        "(\${formatBytes(result.bytesWritten)}). APKs only; app data is not included."
+                    "Exported ${result.exportedApps} apps / ${result.exportedApkFiles} APK files " +
+                        "(${formatBytes(result.bytesWritten)}). APKs only; app data is not included."
                 } else {
-                    "Export failed: \${result.error}"
+                    "Export failed: ${result.error}"
                 }
             }
         }
@@ -139,10 +139,10 @@ private fun ApexBackupApp() {
                 backupBusy = false
                 backupMessage = result.fold(
                     onSuccess = {
-                        "Encrypted backup created and authenticated: \${it.fileCount} files, " +
-                            "\${formatBytes(it.totalBytes)}. Keep the passphrase safe."
+                        "Encrypted backup created and authenticated: ${it.fileCount} files, " +
+                            "${formatBytes(it.totalBytes)}. Keep the passphrase safe."
                     },
-                    onFailure = { "Backup failed: \${it.message ?: "unknown error"}" }
+                    onFailure = { "Backup failed: ${it.message ?: "unknown error"}" }
                 )
             }
         }
@@ -208,7 +208,7 @@ private fun ApexBackupApp() {
                     InfoRow("Manufacturer", device.manufacturer)
                     InfoRow("Model", device.model)
                     InfoRow("Device codename", device.device)
-                    InfoRow("Android", "\${device.androidVersion} (API \${device.apiLevel})")
+                    InfoRow("Android", "${device.androidVersion} (API ${device.apiLevel})")
                     InfoRow("Security patch", device.securityPatch)
                     InfoRow("Build", device.buildDisplay)
                     InfoRow("Fingerprint", device.fingerprint)
@@ -282,7 +282,7 @@ private fun ApexBackupApp() {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("\${selectedPackages.size} selected")
+                        Text("${selectedPackages.size} selected")
                         OutlinedButton(
                             onClick = {
                                 val visible = visibleApps.map { it.packageName }
@@ -331,7 +331,7 @@ private fun ApexBackupApp() {
                         onClick = {
                             pendingExportApps = apps.filter { it.packageName in selectedPackages }
                             val fileName = if (pendingExportApps.size == 1) {
-                                "\${pendingExportApps.first().packageName}.zip"
+                                "${pendingExportApps.first().packageName}.zip"
                             } else {
                                 "Apex-Backup-APKs.zip"
                             }
@@ -378,14 +378,14 @@ private fun ApexBackupApp() {
                                 val safeVersion = app.versionName.replace(Regex("[^A-Za-z0-9._-]"), "_")
                                 app.apkFiles.mapIndexed { index, file ->
                                     val name = if (index == 0) "base.apk" else "split-$index.apk"
-                                    BackupFile("apps/\${app.packageName}/$safeVersion/$name", file)
+                                    BackupFile("apps/${app.packageName}/$safeVersion/$name", file)
                                 }
                             }
                             if (pendingBackupFiles.isEmpty()) {
                                 backupMessage = "Selected apps have no readable APK files."
                             } else {
                                 encryptedBackupLauncher.launch(
-                                    "Apex-Backup-\${System.currentTimeMillis()}.apexbackup"
+                                    "Apex-Backup-${System.currentTimeMillis()}.apexbackup"
                                 )
                             }
                         },
@@ -436,11 +436,11 @@ private fun ApexBackupApp() {
                                     verifyBusy = false
                                     verifyMessage = result.fold(
                                         onSuccess = {
-                                            "Verified: \${it.fileCount} files, \${formatBytes(it.totalBytes)}. " +
+                                            "Verified: ${it.fileCount} files, ${formatBytes(it.totalBytes)}. " +
                                                 "Authentication and SHA-256 checks passed."
                                         },
                                         onFailure = {
-                                            "Verification failed: \${it.message ?: "unknown error"}"
+                                            "Verification failed: ${it.message ?: "unknown error"}"
                                         }
                                     )
                                 }
@@ -485,8 +485,8 @@ private fun AppRow(
             Text(app.label, style = MaterialTheme.typography.bodyLarge)
             Text(app.packageName, style = MaterialTheme.typography.bodySmall)
             Text(
-                "v\${app.versionName} • \${if (app.isSystemApp) "System" else "User"} app • " +
-                    "\${app.apkCount} APK file(s)\${if (app.enabled) "" else " • Disabled"}",
+                "v${app.versionName} • ${if (app.isSystemApp) "System" else "User"} app • " +
+                    "${app.apkCount} APK file(s)${if (app.enabled) "" else " • Disabled"}",
                 style = MaterialTheme.typography.bodySmall
             )
         }
