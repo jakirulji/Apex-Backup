@@ -77,7 +77,12 @@ object BackupContainer {
         validatePassphrase(passphrase)
         val probe = java.io.PushbackInputStream(source, 12)
         val prefix = ByteArray(12)
-        val prefixCount = probe.read(prefix)
+        var prefixCount = 0
+        while (prefixCount < prefix.size) {
+            val n = probe.read(prefix, prefixCount, prefix.size - prefixCount)
+            if (n < 0) break
+            prefixCount += n
+        }
         if (prefixCount > 0) probe.unread(prefix, 0, prefixCount)
         val detectedVersion = if (prefixCount == 12) {
             DataInputStream(ByteArrayInputStream(prefix, 8, 4)).readInt()
