@@ -5,7 +5,7 @@
 | M0 — Repository and build foundation | Complete |
 | M1 — Device/root/storage diagnostics | Device-validated; CI verification tracked in Actions |
 | M2 — App inventory and APK export | Implemented; CI and device validation confirmed |
-| M3 — Encrypted repository format | Implemented; CI and device validation pending |
+| M3 — Encrypted repository format | v3 streaming engine implemented; CI and device validation pending |
 | M4 — App-data backup | Not started |
 | M5 — Same-ROM restore | Not started |
 | M6 — System configuration adapters | Not started |
@@ -47,16 +47,21 @@ M2 APK ZIP export is not a complete application backup.
 
 ## M3 — Encrypted backup container
 
-- [x] Define versioned binary container header and authenticated format metadata (v1/v2).
+- [x] Define versioned binary container header and authenticated format metadata (v1/v2/v3).
 - [x] Derive portable encryption keys with Argon2id (v1 parameters: 3 iterations, 64 MiB, parallelism 1).
 - [x] Encrypt ZIP payload using AES-256-GCM with the complete header as authenticated additional data.
 - [x] Include a final manifest with archive paths, byte sizes and SHA-256 digests.
 - [x] Stream APK files into the encrypted container; do not create a plaintext intermediate archive.
 - [x] Verify password, GCM authentication tag, manifest and per-file SHA-256 digests.
 - [x] Add v2 password verifier for immediate wrong-passphrase rejection; retain v1 read compatibility.
+- [x] Add v3 Tink AES-256-GCM-HKDF Streaming AEAD with a fresh per-backup keyset wrapped by the Argon2id-derived password key.
+- [x] Keep v1/v2 read compatibility; write all new backups as v3.
+- [x] Authenticate the complete stream and final segment; reject truncation and segment tampering.
+- [x] Use bounded 256 KiB I/O buffers and a 1 MiB authenticated segment profile without a software throughput cap.
 - [x] Reject unsafe paths, duplicate entries, unsupported KDF parameters and malformed manifests.
 - [x] Add UI to create encrypted APK containers and verify an existing container through SAF.
 - [ ] CI tests, lint, signed release build and signature verification.
+- [ ] Add automated v3 tests for wrong passphrase early abort, segment tampering, truncation, empty and large payloads, plus v1/v2 compatibility fixtures.
 - [ ] Device validation on Redmi Note 9 Pro / Evolution X 17, including wrong-password and damaged-file checks.
 
 M3 currently encrypts APK files only. It does not yet capture private app data, accounts, sessions, permissions or system settings.
