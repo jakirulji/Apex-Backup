@@ -119,7 +119,7 @@ object RootDiagnosticsRunner {
     }
 
     internal fun isRootIdentity(output: String): Boolean =
-        Regex("""\\buid=0(?:\\(|\\s)""").containsMatchIn(output)
+        Regex("""\buid=0(?:\(|\s)""").containsMatchIn(output)
 
     private data class CommandResult(
         val exitCode: Int,
