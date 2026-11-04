@@ -98,6 +98,8 @@ private fun ApexBackupApp() {
     var verifyPassphrase by remember { mutableStateOf("") }
     var verifyBusy by remember { mutableStateOf(false) }
     var verifyProgressBytes by remember { mutableLongStateOf(0L) }
+    var verifyAverageSpeed by remember { mutableStateOf("0.00 MB/s average") }
+    var verifyStartedAt by remember { mutableLongStateOf(0L) }
     val verifyBytesCounter = remember { AtomicLong(0L) }
     var verifyMessage by remember { mutableStateOf<String?>(null) }
     var verifyUri by remember { mutableStateOf<Uri?>(null) }
@@ -165,6 +167,10 @@ private fun ApexBackupApp() {
         if (verifyBusy) {
             while (true) {
                 verifyProgressBytes = verifyBytesCounter.get()
+                val elapsedMs = (android.os.SystemClock.elapsedRealtime() - verifyStartedAt).coerceAtLeast(1L)
+                val averageMbPerSecond = verifyProgressBytes.toDouble() / (1024.0 * 1024.0) /
+                    (elapsedMs.toDouble() / 1000.0)
+                verifyAverageSpeed = String.format(Locale.US, "%.2f MB/s average", averageMbPerSecond)
                 delay(300)
             }
         }
@@ -438,6 +444,8 @@ private fun ApexBackupApp() {
                                     verifyBusy = true
                                     verifyBytesCounter.set(0L)
                                     verifyProgressBytes = 0L
+                                    verifyStartedAt = android.os.SystemClock.elapsedRealtime()
+                                    verifyAverageSpeed = "0.00 MB/s average"
                                     verifyMessage = "Verifying encryption and file integrity…"
                                     val password = verifyPassphrase.toCharArray()
                                     try {
@@ -472,7 +480,7 @@ private fun ApexBackupApp() {
                     if (verifyBusy) {
                         CircularProgressIndicator()
                         Text(
-                            "Reading and authenticating: ${formatBytes(verifyProgressBytes)} processed",
+                            "Reading and authenticating: ${formatBytes(verifyProgressBytes)} processed • $verifyAverageSpeed",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
