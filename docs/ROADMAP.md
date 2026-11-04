@@ -6,7 +6,7 @@
 | M1 — Device/root/storage diagnostics | Device-validated; CI verified |
 | M2 — App inventory and APK export | Device-validated; CI verified |
 | M3 — Encrypted repository format | v3 streaming engine; CI and device validation confirmed |
-| M4 — App-data backup | In progress — safety design and capture boundary |
+| M4 — App-data backup | In progress — safety design, capture boundary and synthetic fixture app |
 | M5 — Same-ROM restore | Not started |
 | M6 — System config | Not started |
 | M7 — Storage targets | Not started |
@@ -21,7 +21,7 @@
 - [x] Permanent JKS signing configured.
 - [x] CI validates the signed release APK.
 - [x] CI publishes one user-facing APK: `Apex Backup.apk`.
-- [x] Test/debug APK is not uploaded as a separate artifact.
+- [x] Test/debug APK is not uploaded as a separate artifact; the isolated M4 fixture app is published separately for device validation.
 
 ## M1 — Device/root/storage diagnostics
 
@@ -65,6 +65,8 @@ M3 currently encrypts APK files only. It does not include private app data, acco
 Design and safety requirements are tracked in [ADR-004: App-data capture](decisions/ADR-004-app-data-capture.md).
 
 - [x] Define scope, root boundary, consistency policy and non-goals.
+- [x] Add isolated `Apex Backup Test Lab` app (`com.apex.backup.testlab`) to generate and verify synthetic CE, DE, database, SharedPreferences, app-specific external, OBB and cache fixtures.
+- [x] Build the Test Lab debug APK separately in CI; publish it as the `apex-backup-test-lab` artifact without changing the signed Apex Backup release artifact.
 - [ ] Generalize the container input API so root-produced streams can be encrypted directly without plaintext temporary archives.
 - [ ] Implement a bounded, cancellable root process session with stdout streaming and stderr draining.
 - [ ] Capture CE and DE app-private data for explicitly selected Android user-0 packages.
@@ -73,8 +75,7 @@ Design and safety requirements are tracked in [ADR-004: App-data capture](decisi
 - [ ] Record package/version/signing identity, source device/ROM/API/ABI, Android user and category outcomes in authenticated metadata.
 - [ ] Require explicit confirmation before stopping selected apps; never silently force-stop apps.
 - [ ] Report captured, skipped, failed and unsupported items separately.
-- [ ] Add synthetic root-free fixtures and security tests for path traversal, symlinks, process failure, timeout, cancellation and partial streams.
-- [ ] Validate on the target device with a disposable synthetic test app before any personal app data is used.
+- [ ] Validate the Test Lab app on the target device, then use it for the synthetic end-to-end capture tests.
 
 M4 is backup-only. It does not restore data or promise cross-ROM compatibility.
 
