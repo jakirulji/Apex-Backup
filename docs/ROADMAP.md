@@ -2,7 +2,7 @@
 
 | Milestone | Status |
 |---|---|
-| M0 — Repository and build foundation | In progress |
+| M0 — Repository and build foundation | In progress (M0.1 complete; M0.2 CI verification pending) |
 | M1 — Device/root/storage diagnostics | Not started |
 | M2 — App inventory and APK export | Not started |
 | M3 — Encrypted repository format | Not started |
@@ -18,7 +18,7 @@
 ## M0 task status
 
 - [x] M0.1 Repository reconnaissance: initial repository contained no source, README, or CI workflow.
-- [ ] M0.2 Buildable Android project foundation: skeleton committed; CI verification pending.
+- [ ] M0.2 Buildable Android project foundation: Compose skeleton and CI workflow committed; CI verification pending.
 - [ ] M0.3 Documentation and CI baseline: documentation started; CI verification pending.
 
 A task is complete only after the relevant build/tests have been run and the results inspected.
