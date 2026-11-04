@@ -33,6 +33,7 @@ The verifier is compared in constant time immediately after reading the bounded 
 
 - New backups use Tink's `AES256_GCM_HKDF_1MB` Streaming AEAD profile.
 - ZIP data is fed directly into the encrypting stream; the complete payload is never loaded into RAM or written as a plaintext temporary file.
+- APK payload entries use ZIP's no-compression mode because APKs are already ZIP-compressed; this avoids spending CPU on redundant compression.
 - Each authenticated segment is bound to its position in the stream. Segment reordering, insertion, removal and cross-container substitution are detected.
 - Verification consumes the complete decrypted stream, including its final segment, so truncation and final-segment authentication failures are detected.
 - The streaming layer uses bounded, heap-adaptive I/O buffers (256 KiB–4 MiB). It does not impose a software throughput ceiling. Actual speed is bounded by device CPU/crypto implementation, source/destination storage and Android document-provider throughput.
