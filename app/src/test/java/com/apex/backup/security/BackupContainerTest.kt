@@ -103,6 +103,53 @@ class BackupContainerTest {
     }
 
     @Test
+    fun truncatedStreamingCiphertextIsRejected() {
+        val source = File.createTempFile("apex-source", ".apk")
+        try {
+            source.writeBytes(ByteArray(2 * 1024 * 1024) { (it % 239).toByte() })
+            val output = ByteArrayOutputStream()
+            BackupContainer.create(
+                output,
+                listOf(BackupFile("apps/example.app/base.apk", source)),
+                "correct horse battery staple".toCharArray()
+            )
+            val complete = output.toByteArray()
+            val truncated = complete.copyOf(complete.size - 1)
+            assertThrows(BackupContainerException::class.java) {
+                BackupContainer.verify(
+                    ByteArrayInputStream(truncated),
+                    "correct horse battery staple".toCharArray()
+                )
+            }
+        } finally {
+            source.delete()
+        }
+    }
+
+    @Test
+    fun emptyPayloadFileIsSupported() {
+        val source = File.createTempFile("apex-empty", ".apk")
+        try {
+            source.writeBytes(ByteArray(0))
+            val output = ByteArrayOutputStream()
+            val created = BackupContainer.create(
+                output,
+                listOf(BackupFile("apps/example.app/empty.apk", source)),
+                "correct horse battery staple".toCharArray()
+            )
+            val verified = BackupContainer.verify(
+                ByteArrayInputStream(output.toByteArray()),
+                "correct horse battery staple".toCharArray()
+            )
+            assertEquals(0L, created.totalBytes)
+            assertEquals(0L, verified.totalBytes)
+            assertEquals(1, verified.fileCount)
+        } finally {
+            source.delete()
+        }
+    }
+
+    @Test
     fun pathTraversalIsRejectedBeforeWriting() {
         val source = File.createTempFile("apex-source", ".apk")
         try {
