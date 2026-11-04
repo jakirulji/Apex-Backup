@@ -129,7 +129,9 @@ private fun ApexBackupApp() {
                     runCatching {
                         val output = context.contentResolver.openOutputStream(uri)
                             ?: error("Could not open the selected destination.")
-                        BackupContainer.create(output, pendingBackupFiles, password)
+                        output.use {
+                            BackupContainer.create(it, pendingBackupFiles, password)
+                        }
                     }
                 }
                 backupPassphrase = ""
@@ -425,7 +427,9 @@ private fun ApexBackupApp() {
                                         runCatching {
                                             val input = context.contentResolver.openInputStream(uri)
                                                 ?: error("Could not open the selected backup.")
-                                            BackupContainer.verify(input, password)
+                                            input.use {
+                                                BackupContainer.verify(it, password)
+                                            }
                                         }
                                     }
                                     verifyPassphrase = ""
