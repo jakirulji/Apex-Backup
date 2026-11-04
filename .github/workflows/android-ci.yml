@@ -2,9 +2,9 @@ name: Android CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
   pull_request:
-    branches: [main, dev]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -41,6 +41,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
+          set -euo pipefail
           for name in KEYSTORE_BASE64 APEX_KEYSTORE_PASSWORD APEX_KEY_ALIAS APEX_KEY_PASSWORD; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing required GitHub Actions secret for signing: $name"
@@ -49,7 +50,7 @@ jobs:
           done
 
       - name: Prepare release keystore
-        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -74,11 +75,11 @@ jobs:
         run: "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
 
       - name: Assemble release APK
-        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        if: ${{ github.event_name != 'pull_request' }}
         run: gradle --no-daemon assembleRelease
 
       - name: Verify release APK signature
-        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        if: ${{ github.event_name != 'pull_request' }}
         shell: bash
         run: "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
