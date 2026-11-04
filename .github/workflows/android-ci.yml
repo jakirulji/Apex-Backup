@@ -14,11 +14,6 @@ jobs:
   build:
     name: Verify Android project
     runs-on: ubuntu-latest
-    env:
-      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-      APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,6 +35,11 @@ jobs:
       - name: Require signing secrets for branch builds
         if: ${{ github.event_name != 'pull_request' }}
         shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           for name in KEYSTORE_BASE64 APEX_KEYSTORE_PASSWORD APEX_KEY_ALIAS APEX_KEY_PASSWORD; do
@@ -52,12 +52,15 @@ jobs:
       - name: Prepare release keystore
         if: ${{ github.event_name != 'pull_request' }}
         shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/apex-backup-release.jks"
           test -s "$RUNNER_TEMP/apex-backup-release.jks"
           echo "APEX_KEYSTORE_PATH=$RUNNER_TEMP/apex-backup-release.jks" >> "$GITHUB_ENV"
+          echo "APEX_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -68,6 +71,10 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest lint
 
       - name: Assemble debug APK
+        env:
+          APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle --no-daemon assembleDebug
 
       - name: Verify debug APK signature
@@ -76,6 +83,10 @@ jobs:
 
       - name: Assemble release APK
         if: ${{ github.event_name != 'pull_request' }}
+        env:
+          APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle --no-daemon assembleRelease
 
       - name: Verify release APK signature
