@@ -4,6 +4,20 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.bouncycastle.crypto.generators.Argon2BytesGenerator
+import org.bouncycastle.crypto.params.Argon2Parameters
+import java.io.DataOutputStream
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.CipherOutputStream
+import javax.crypto.Mac
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -147,6 +161,82 @@ class BackupContainerTest {
         } finally {
             source.delete()
         }
+    }
+
+    @Test
+    fun versionOneAndTwoContainersRemainReadable() {
+        listOf(1, 2).forEach { version ->
+            val legacy = createLegacyFixture(version)
+            val verified = BackupContainer.verify(
+                ByteArrayInputStream(legacy),
+                "correct horse battery staple".toCharArray()
+            )
+            assertEquals(version, verified.formatVersion)
+            assertEquals(1, verified.fileCount)
+            assertEquals("legacy payload".toByteArray().size.toLong(), verified.totalBytes)
+        }
+    }
+
+    private fun createLegacyFixture(version: Int): ByteArray {
+        val password = "correct horse battery staple".toCharArray()
+        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        val nonce = ByteArray(12).also { SecureRandom().nextBytes(it) }
+        val encoded = StandardCharsets.UTF_8.encode(java.nio.CharBuffer.wrap(password))
+        val passwordBytes = ByteArray(encoded.remaining()).also { encoded.get(it) }
+        val key = ByteArray(32)
+        val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+            .withVersion(Argon2Parameters.ARGON2_VERSION_13)
+            .withIterations(3).withMemoryAsKB(65536).withParallelism(1).withSalt(salt).build()
+        Argon2BytesGenerator().apply { init(params) }.generateBytes(passwordBytes, key)
+        passwordBytes.fill(0)
+        val headerOut = ByteArrayOutputStream()
+        DataOutputStream(headerOut).use { out ->
+            out.write("APEXBKUP".toByteArray(StandardCharsets.US_ASCII))
+            out.writeInt(version)
+            out.writeByte(1)
+            out.writeInt(3)
+            out.writeInt(65536)
+            out.writeInt(1)
+            out.writeByte(16)
+            out.writeByte(12)
+            out.write(salt)
+            out.write(nonce)
+            if (version == 2) {
+                val verifierKey = MessageDigest.getInstance("SHA-256").digest(
+                    key + "APEX-BACKUP-PASSWORD-VERIFIER-KEY-V2".toByteArray(StandardCharsets.US_ASCII)
+                )
+                val mac = Mac.getInstance("HmacSHA256")
+                mac.init(SecretKeySpec(verifierKey, "HmacSHA256"))
+                mac.update("APEX-BACKUP-PASSWORD-VERIFIER-V2".toByteArray(StandardCharsets.US_ASCII))
+                out.write(mac.doFinal(salt).copyOf(16))
+                verifierKey.fill(0)
+            }
+        }
+        val header = headerOut.toByteArray()
+        val encrypted = ByteArrayOutputStream()
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(128, nonce))
+        cipher.updateAAD(header)
+        ZipOutputStream(CipherOutputStream(encrypted, cipher)).use { zip ->
+            val payload = "legacy payload".toByteArray()
+            zip.putNextEntry(ZipEntry("apps/legacy/base.apk").apply { time = 0L })
+            zip.write(payload)
+            zip.closeEntry()
+            val digest = MessageDigest.getInstance("SHA-256").digest(payload)
+                .joinToString("") { "%02x".format(it) }
+            val encoder = Base64.getUrlEncoder().withoutPadding()
+            val manifest = "APEX-MANIFEST-1\n" +
+                "created_at=" + encoder.encodeToString("2026-01-01T00:00:00Z".toByteArray()) + "\n" +
+                "entry_count=1\n" +
+                "entry.0=" + encoder.encodeToString("apps/legacy/base.apk".toByteArray()) +
+                "|13|" + digest + "\n"
+            zip.putNextEntry(ZipEntry("META-INF/apex-manifest.txt").apply { time = 0L })
+            zip.write(manifest.toByteArray(StandardCharsets.UTF_8))
+            zip.closeEntry()
+        }
+        key.fill(0)
+        password.fill('\u0000')
+        return header + encrypted.toByteArray()
     }
 
     @Test
