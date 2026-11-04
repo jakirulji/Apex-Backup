@@ -14,6 +14,11 @@ jobs:
   build:
     name: Verify Android project
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,6 +37,27 @@ jobs:
       - name: Install Android SDK components
         run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Require signing secrets for branch builds
+        if: ${{ github.event_name != 'pull_request' }}
+        shell: bash
+        run: |
+          for name in KEYSTORE_BASE64 APEX_KEYSTORE_PASSWORD APEX_KEY_ALIAS APEX_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required GitHub Actions secret for signing: $name"
+              exit 1
+            fi
+          done
+
+      - name: Prepare release keystore
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/apex-backup-release.jks"
+          test -s "$RUNNER_TEMP/apex-backup-release.jks"
+          echo "APEX_KEYSTORE_PATH=$RUNNER_TEMP/apex-backup-release.jks" >> "$GITHUB_ENV"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -42,6 +68,17 @@ jobs:
 
       - name: Assemble debug APK
         run: gradle --no-daemon assembleDebug
+
+      - name: Verify debug APK signature
+        run: apksigner verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Assemble release APK
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        run: gradle --no-daemon assembleRelease
+
+      - name: Verify release APK signature
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        run: apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-release-unsigned.apk
 
       - name: Prepare test artifact
         run: cp app/build/outputs/apk/debug/app-debug.apk test.apk
