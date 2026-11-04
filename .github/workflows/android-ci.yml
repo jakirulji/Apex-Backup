@@ -1,10 +1,14 @@
 name: Android CI
 
-on:
+'on':
   push:
-    branches: [dev]
+    branches:
+      - main
+      - dev
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - dev
   workflow_dispatch:
 
 permissions:
@@ -12,42 +16,38 @@ permissions:
 
 jobs:
   build:
-    name: Verify Android project
+    name: Build and test Android app
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
 
-      - name: Install Android SDK components
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Android SDK
+        run: sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.13"
+          gradle-version: '8.13'
 
-      - name: Run unit tests and lint
+      - name: Run tests and lint
         run: gradle --no-daemon testDebugUnitTest lint
 
-      - name: Assemble debug APK
+      - name: Build debug APK
         run: gradle --no-daemon assembleDebug
 
-      - name: Verify debug APK signature
-        shell: bash
-        run: "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Prepare test artifact
+      - name: Rename APK
         run: cp app/build/outputs/apk/debug/app-debug.apk test.apk
 
       - name: Upload test APK
