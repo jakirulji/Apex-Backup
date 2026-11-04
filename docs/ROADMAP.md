@@ -3,8 +3,8 @@
 | Milestone | Status |
 |---|---|
 | M0 — Repository and build foundation | Complete |
-| M1 — Device/root/storage diagnostics | Implemented; CI and device validation pending |
-| M2 — App inventory and APK export | Not started |
+| M1 — Device/root/storage diagnostics | Device-validated; CI verification tracked in Actions |
+| M2 — App inventory and APK export | Implemented; CI and device validation pending |
 | M3 — Encrypted repository format | Not started |
 | M4 — App-data backup | Not started |
 | M5 — Same-ROM restore | Not started |
@@ -15,27 +15,38 @@
 | M10 — Magisk module migration | Not started |
 | M11 — Hardening and release | Not started |
 
-## M0 completion
+## M0 — Build and signing
 
-- [x] Repository reconnaissance and Android project foundation.
-- [x] Documentation and CI baseline.
-- [x] Permanent JKS signing configured for debug and release builds.
-- [x] CI verifies both APK signatures and confirms the certificate SHA-256 fingerprints match.
+- [x] Android project foundation and CI.
+- [x] Permanent JKS signing configured.
+- [x] CI validates the signed release APK.
+- [x] CI publishes one user-facing APK: `Apex Backup.apk`.
+- [x] Test/debug APK is no longer uploaded as a separate artifact.
 
 ## M1 — Device/root/storage diagnostics
 
-- [x] Read device model, codename, Android/API level, security patch, build and ABI data.
-- [x] Read internal data partition total/available/used space.
-- [x] Add explicit user-triggered root check; do not trigger a Magisk prompt at app launch.
-- [x] Bound root command execution with an 8-second timeout.
-- [x] When root is granted, read Magisk version, SELinux mode and Android encryption properties.
-- [x] Keep root commands fixed and read-only; no user-supplied shell strings.
-- [ ] Verify unit tests, lint, signed debug/release builds and matching certificate in CI.
-- [ ] Install and validate on Redmi Note 9 Pro (joyeuse), Evolution X 17 and Magisk.
-- [ ] Confirm root-denied and root-granted behavior on device.
+- [x] Device model, codename, Android/API level, security patch, build and ABI data.
+- [x] Internal data partition total/available/used space.
+- [x] Explicit user-triggered root check; no root prompt at app launch.
+- [x] Bounded root command execution and fixed read-only commands.
+- [x] Magisk version, SELinux mode and Android encryption properties when root is granted.
+- [x] User has confirmed that device information is displayed correctly.
+- [x] CI verification is tracked in the corresponding GitHub Actions run.
 
-M1 is not considered fully validated until CI passes and the app has been exercised on the target device.
+## M2 — App inventory and APK export
+
+- [x] Enumerate installed applications using Android package visibility permission.
+- [x] Display app label, package name, version, user/system classification and readable APK file count.
+- [x] Search by app label or package name.
+- [x] Filter all/user/system apps and select multiple apps.
+- [x] Export selected base and split APK files into a ZIP using Android's system document picker.
+- [x] Export runs off the main thread and reports errors.
+- [x] Clearly disclose that APK export does not include private app data, accounts, login sessions or app settings.
+- [ ] Verify CI and signed release APK.
+- [ ] Validate package visibility and APK export on Redmi Note 9 Pro / Evolution X 17.
+
+M2 does not back up or restore private app data. APK export is not a complete application backup.
 
 ## Next
 
-M2 begins with a read-only package inventory, package metadata and APK export. It must not attempt app-data backup until the package inventory and storage/export path are tested.
+M3 defines and tests the versioned encrypted backup container before any private app data is read or copied.
