@@ -44,7 +44,7 @@ class BackupContainerException(message: String, cause: Throwable? = null) :
  * The plaintext payload is a ZIP stream with payload files and a final authenticated manifest.
  */
 object BackupContainer {
-    const val FORMAT_VERSION = 2
+    const val FORMAT_VERSION = 3
     const val FILE_EXTENSION = ".apexbackup"
 
     private val MAGIC = "APEXBKUP".toByteArray(StandardCharsets.US_ASCII)
@@ -67,72 +67,7 @@ object BackupContainer {
         destination: OutputStream,
         files: List<BackupFile>,
         passphrase: CharArray
-    ): BackupSummary {
-        validatePassphrase(passphrase)
-        validateFiles(files)
-
-        val salt = ByteArray(SALT_LENGTH).also(random::nextBytes)
-        val nonce = ByteArray(NONCE_LENGTH).also(random::nextBytes)
-        val key = deriveKey(passphrase, salt)
-        val passwordVerifier = createPasswordVerifier(key, salt)
-        val header = buildHeader(salt, nonce, passwordVerifier)
-        val createdAt = java.time.Instant.now().toString()
-        val records = ArrayList<EntryRecord>(files.size)
-        var totalBytes = 0L
-
-        try {
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(
-                Cipher.ENCRYPT_MODE,
-                SecretKeySpec(key, "AES"),
-                GCMParameterSpec(TAG_LENGTH_BITS, nonce)
-            )
-            cipher.updateAAD(header)
-            destination.write(header)
-            destination.flush()
-
-            ZipOutputStream(CipherOutputStream(destination, cipher)).use { zip ->
-                files.forEach { backupFile ->
-                    val entry = ZipEntry(backupFile.archivePath)
-                    entry.time = 0L
-                    zip.putNextEntry(entry)
-                    val digest = MessageDigest.getInstance("SHA-256")
-                    var size = 0L
-                    backupFile.source.inputStream().use { input ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        while (true) {
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            zip.write(buffer, 0, count)
-                            digest.update(buffer, 0, count)
-                            size += count
-                        }
-                    }
-                    zip.closeEntry()
-                    totalBytes += size
-                    records += EntryRecord(
-                        backupFile.archivePath,
-                        size,
-                        digest.digest().toHex()
-                    )
-                }
-
-                val manifest = encodeManifest(createdAt, records)
-                zip.putNextEntry(ZipEntry(MANIFEST_PATH).apply { time = 0L })
-                zip.write(manifest)
-                zip.closeEntry()
-            }
-            return BackupSummary(FORMAT_VERSION, createdAt, records.size, totalBytes)
-        } catch (error: Exception) {
-            throw BackupContainerException(
-                "Could not create encrypted backup: ${error.message ?: error.javaClass.simpleName}",
-                error
-            )
-        } finally {
-            key.fill(0)
-            passphrase.fill('\u0000')
-        }
-    }
+    ): BackupSummary = BackupContainerV3.create(destination, files, passphrase)
 
     fun verify(
         source: InputStream,
@@ -140,7 +75,17 @@ object BackupContainer {
         onProgress: (Long) -> Unit = {}
     ): BackupSummary {
         validatePassphrase(passphrase)
-        val trackedSource = ProgressInputStream(source, onProgress)
+        val probe = java.io.PushbackInputStream(source, 12)
+        val prefix = ByteArray(12)
+        val prefixCount = probe.read(prefix)
+        if (prefixCount > 0) probe.unread(prefix, 0, prefixCount)
+        val detectedVersion = if (prefixCount == 12) {
+            DataInputStream(ByteArrayInputStream(prefix, 8, 4)).readInt()
+        } else -1
+        if (detectedVersion == 3) {
+            return BackupContainerV3.verify(probe, passphrase, onProgress)
+        }
+        val trackedSource = ProgressInputStream(probe, onProgress)
         val headerData = readHeader(trackedSource)
         val key = deriveKey(passphrase, headerData.salt)
         try {
@@ -351,7 +296,7 @@ object BackupContainer {
             val saltLength = data.readUnsignedByte()
             val nonceLength = data.readUnsignedByte()
 
-            if ((version != 1 && version != FORMAT_VERSION) || kdf != KDF_ARGON2ID ||
+            if ((version != 1 && version != 2) || kdf != KDF_ARGON2ID ||
                 iterations != ARGON2_ITERATIONS || memory != ARGON2_MEMORY_KIB ||
                 parallelism != ARGON2_PARALLELISM ||
                 saltLength != SALT_LENGTH || nonceLength != NONCE_LENGTH
