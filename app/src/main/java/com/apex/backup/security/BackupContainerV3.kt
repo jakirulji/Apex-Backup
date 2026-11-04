@@ -140,7 +140,8 @@ internal object BackupContainerV3 {
             )
             val streamingAead = keyset.getPrimitive(RegistryConfiguration.get(), StreamingAead::class.java)
             val decrypted = streamingAead.newDecryptingStream(tracked, header.encoded)
-            val zip = ZipInputStream(decrypted.buffered(256 * 1024))
+            val plaintext = decrypted.buffered(256 * 1024)
+            val zip = ZipInputStream(plaintext)
             val actual = LinkedHashMap<String, Record>()
             var manifestBytes: ByteArray? = null
             var manifestSeen = false
@@ -171,7 +172,7 @@ internal object BackupContainerV3 {
                 zip.closeEntry()
             }
             val drain = ByteArray(256 * 1024)
-            while (decrypted.read(drain) >= 0) { /* force final segment authentication */ }
+            while (plaintext.read(drain) >= 0) { /* force final segment authentication */ }
             zip.close()
             val parsed = decodeManifest(manifestBytes ?: throw BackupContainerException("Backup manifest is missing."))
             if (parsed.second.size != actual.size) throw BackupContainerException("Backup contents do not match the manifest.")
