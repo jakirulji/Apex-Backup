@@ -88,8 +88,7 @@ object RootDiagnosticsRunner {
             )
         }
 
-        val isRoot = identity.exitCode == 0 &&
-            Regex("""\\buid=0(?:\\(|\\s)""").containsMatchIn(identity.output)
+        val isRoot = identity.exitCode == 0 && isRootIdentity(identity.output)
 
         if (!isRoot) {
             return RootDiagnostics(
@@ -118,6 +117,9 @@ object RootDiagnosticsRunner {
             detail = null
         )
     }
+
+    internal fun isRootIdentity(output: String): Boolean =
+        Regex("""\\buid=0(?:\\(|\\s)""").containsMatchIn(output)
 
     private data class CommandResult(
         val exitCode: Int,
