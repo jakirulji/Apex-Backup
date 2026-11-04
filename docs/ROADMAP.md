@@ -47,12 +47,13 @@ M2 APK ZIP export is not a complete application backup.
 
 ## M3 — Encrypted backup container
 
-- [x] Define versioned binary container header and authenticated format metadata.
+- [x] Define versioned binary container header and authenticated format metadata (v1/v2).
 - [x] Derive portable encryption keys with Argon2id (v1 parameters: 3 iterations, 64 MiB, parallelism 1).
 - [x] Encrypt ZIP payload using AES-256-GCM with the complete header as authenticated additional data.
 - [x] Include a final manifest with archive paths, byte sizes and SHA-256 digests.
 - [x] Stream APK files into the encrypted container; do not create a plaintext intermediate archive.
 - [x] Verify password, GCM authentication tag, manifest and per-file SHA-256 digests.
+- [x] Add v2 password verifier for immediate wrong-passphrase rejection; retain v1 read compatibility.
 - [x] Reject unsafe paths, duplicate entries, unsupported KDF parameters and malformed manifests.
 - [x] Add UI to create encrypted APK containers and verify an existing container through SAF.
 - [ ] CI tests, lint, signed release build and signature verification.
