@@ -1,6 +1,7 @@
 package com.apex.backup
 
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,6 +21,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -98,6 +100,7 @@ private fun ApexBackupApp() {
     var verifyPassphrase by remember { mutableStateOf("") }
     var verifyBusy by remember { mutableStateOf(false) }
     var verifyProgressBytes by remember { mutableLongStateOf(0L) }
+    var verifyTotalBytes by remember { mutableLongStateOf(-1L) }
     var verifyAverageSpeed by remember { mutableStateOf("0.00 MB/s average") }
     var verifyStartedAt by remember { mutableLongStateOf(0L) }
     val verifyBytesCounter = remember { AtomicLong(0L) }
@@ -160,6 +163,17 @@ private fun ApexBackupApp() {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         verifyUri = uri
+        verifyTotalBytes = if (uri == null) {
+            -1L
+        } else {
+            runCatching {
+                context.contentResolver.query(
+                    uri, arrayOf(OpenableColumns.SIZE), null, null, null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else -1L
+                } ?: -1L
+            }.getOrDefault(-1L)
+        }
         verifyMessage = if (uri == null) null else "Backup selected. Enter its passphrase and verify."
     }
 
@@ -478,11 +492,27 @@ private fun ApexBackupApp() {
                         Text("Verify backup")
                     }
                     if (verifyBusy) {
-                        CircularProgressIndicator()
-                        Text(
-                            "Reading and authenticating: ${formatBytes(verifyProgressBytes)} processed • $verifyAverageSpeed",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        val progress = if (verifyTotalBytes > 0L) {
+                            (verifyProgressBytes.toFloat() / verifyTotalBytes.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            null
+                        }
+                        if (progress != null) {
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                "${(progress * 100).toInt()}% • ${formatBytes(verifyProgressBytes)} / ${formatBytes(verifyTotalBytes)} • $verifyAverageSpeed",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Text(
+                                "${formatBytes(verifyProgressBytes)} processed • $verifyAverageSpeed",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                     verifyMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     Text(
