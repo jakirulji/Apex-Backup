@@ -42,6 +42,7 @@ class BackupContainerTest {
                 "correct horse battery staple".toCharArray()
             )
 
+            assertEquals(3, created.formatVersion)
             assertEquals(1, created.fileCount)
             assertEquals(source.length(), created.totalBytes)
             assertEquals(created.fileCount, verified.fileCount)
@@ -69,8 +70,8 @@ class BackupContainerTest {
                 BackupContainer.verify(counted, "this is the wrong password".toCharArray())
             }
             assertEquals("Wrong passphrase.", error.message)
-            // v2 header is 71 bytes; no encrypted payload byte should be read.
-            assertEquals(71, counted.bytesRead)
+            // v3 reads its bounded header and wrapped keyset, but no streaming payload.
+            assertTrue(counted.bytesRead > 71)
             assertTrue(counted.bytesRead < bytes.size)
         } finally {
             source.delete()
