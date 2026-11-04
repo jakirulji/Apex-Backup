@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build, sign and verify Android APKs
+    name: Build, sign and verify release APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -51,7 +51,6 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-
           for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [[ -z "${!name:-}" ]]; then
               echo "::error::Required GitHub secret is missing: $name"
@@ -62,7 +61,6 @@ jobs:
           KEYSTORE_PATH="$RUNNER_TEMP/apex-release.jks"
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           chmod 600 "$KEYSTORE_PATH"
-
           if [[ ! -s "$KEYSTORE_PATH" ]]; then
             echo "::error::Decoded keystore is empty"
             exit 1
@@ -78,47 +76,33 @@ jobs:
             echo "APEX_KEY_PASSWORD=$KEY_PASSWORD"
           } >> "$GITHUB_ENV"
 
-      - name: Build signed debug and release APKs
-        run: gradle --no-daemon assembleDebug assembleRelease
+      - name: Build signed release APK
+        run: gradle --no-daemon assembleRelease
 
-      - name: Rename APKs
+      - name: Rename release APK
         shell: bash
         run: |
           set -euo pipefail
-          cp app/build/outputs/apk/debug/app-debug.apk test.apk
           cp app/build/outputs/apk/release/app-release.apk "Apex Backup.apk"
 
-      - name: Verify APK signatures and certificate match
+      - name: Verify release APK signature
         shell: bash
         run: |
           set -euo pipefail
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-
-          "$APKSIGNER" verify --verbose --print-certs test.apk > debug-signature.txt
           "$APKSIGNER" verify --verbose --print-certs "Apex Backup.apk" > release-signature.txt
-
-          DEBUG_CERT="$(grep -m1 'Signer #1 certificate SHA-256 digest:' debug-signature.txt | awk -F': ' '{print $2}')"
           RELEASE_CERT="$(grep -m1 'Signer #1 certificate SHA-256 digest:' release-signature.txt | awk -F': ' '{print $2}')"
-
-          if [[ -z "$DEBUG_CERT" || -z "$RELEASE_CERT" ]]; then
-            echo "::error::Could not read signing certificate fingerprints"
+          if [[ -z "$RELEASE_CERT" ]]; then
+            echo "::error::Could not read release signing certificate fingerprint"
             exit 1
           fi
+          echo "Release APK signature verified."
+          echo "Certificate SHA-256: $RELEASE_CERT"
 
-          if [[ "$DEBUG_CERT" != "$RELEASE_CERT" ]]; then
-            echo "::error::Debug and release APK certificates do not match"
-            exit 1
-          fi
-
-          echo "Both APKs are validly signed with the same certificate."
-          echo "Certificate SHA-256: $DEBUG_CERT"
-
-      - name: Upload signed APKs
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: dev-signed-apks
-          path: |
-            test.apk
-            Apex Backup.apk
+          name: apex-backup-release-apk
+          path: "Apex Backup.apk"
           if-no-files-found: error
           retention-days: 14
