@@ -147,7 +147,7 @@ internal object BackupContainerV3 {
             val keyset = TinkJsonProtoKeysetFormat.parseKeyset(
                 keysetJson, InsecureSecretKeyAccess.get()
             )
-            val streamingAead = keyset.getPrimitive(RegistryConfiguration.get(), StreamingAead::class.java)
+            val streamingAead = keyset.getPrimitive(StreamingAead::class.java)
             val decrypted = streamingAead.newDecryptingStream(tracked, header.encoded)
             val plaintext = decrypted.buffered(ioBufferSize())
             val zip = ZipInputStream(plaintext)
