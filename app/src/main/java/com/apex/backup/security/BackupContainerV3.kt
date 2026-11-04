@@ -4,7 +4,7 @@ import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.KeyTemplates
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.StreamingAead
-import com.google.crypto.tink.TinkJsonProtoKeysetFormat
+import com.google.crypto.tink.TinkProtoKeysetFormat
 import com.google.crypto.tink.streamingaead.StreamingAeadConfig
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator
 import org.bouncycastle.crypto.params.Argon2Parameters
@@ -64,9 +64,9 @@ internal object BackupContainerV3 {
         try {
             initTink()
             val keyset = KeysetHandle.generateNew(KeyTemplates.get("AES256_GCM_HKDF_1MB"))
-            val serializedKeyset = TinkJsonProtoKeysetFormat.serializeKeyset(
+            val serializedKeyset = TinkProtoKeysetFormat.serializeKeyset(
                 keyset, InsecureSecretKeyAccess.get()
-            ).toByteArray(StandardCharsets.UTF_8)
+            )
             val verifier = passwordVerifier(key, salt)
             val prefix = buildPrefix(salt, wrapNonce, verifier)
             val wrapCipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -138,15 +138,19 @@ internal object BackupContainerV3 {
                 GCMParameterSpec(TAG_BITS, header.wrapNonce)
             )
             unwrap.updateAAD(header.prefix)
-            val keysetJson = try {
-                unwrap.doFinal(header.wrappedKeyset).toString(StandardCharsets.UTF_8)
+            val serializedKeyset = try {
+                unwrap.doFinal(header.wrappedKeyset)
             } catch (e: Exception) {
                 throw BackupContainerException("Backup keyset authentication failed.", e)
             }
             initTink()
-            val keyset = TinkJsonProtoKeysetFormat.parseKeyset(
-                keysetJson, InsecureSecretKeyAccess.get()
-            )
+            val keyset = try {
+                TinkProtoKeysetFormat.parseKeyset(
+                    serializedKeyset, InsecureSecretKeyAccess.get()
+                )
+            } finally {
+                serializedKeyset.fill(0)
+            }
             val streamingAead = keyset.getPrimitive(StreamingAead::class.java)
             val decrypted = streamingAead.newDecryptingStream(tracked, header.encoded)
             val plaintext = decrypted.buffered(ioBufferSize())
