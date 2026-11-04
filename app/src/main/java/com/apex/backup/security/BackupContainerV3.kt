@@ -50,6 +50,12 @@ internal object BackupContainerV3 {
         StreamingAeadConfig.register()
     }
 
+    // Scale sequential I/O buffers with the app heap; cap memory use, not throughput.
+    private fun ioBufferSize(): Int =
+        (Runtime.getRuntime().maxMemory() / 128L).coerceIn(
+            256L * 1024L, 4L * 1024L * 1024L
+        ).toInt()
+
     fun create(destination: OutputStream, files: List<BackupFile>, passphrase: CharArray): BackupSummary {
         validatePassphrase(passphrase)
         validateFiles(files)
@@ -88,8 +94,8 @@ internal object BackupContainerV3 {
                     zip.putNextEntry(ZipEntry(file.archivePath).apply { time = 0L })
                     val digest = MessageDigest.getInstance("SHA-256")
                     var size = 0L
-                    file.source.inputStream().buffered(256 * 1024).use { input ->
-                        val buffer = ByteArray(256 * 1024)
+                    file.source.inputStream().buffered(ioBufferSize()).use { input ->
+                        val buffer = ByteArray(ioBufferSize())
                         while (true) {
                             val count = input.read(buffer)
                             if (count < 0) break
@@ -144,7 +150,7 @@ internal object BackupContainerV3 {
             )
             val streamingAead = keyset.getPrimitive(RegistryConfiguration.get(), StreamingAead::class.java)
             val decrypted = streamingAead.newDecryptingStream(tracked, header.encoded)
-            val plaintext = decrypted.buffered(256 * 1024)
+            val plaintext = decrypted.buffered(ioBufferSize())
             val zip = ZipInputStream(plaintext)
             val actual = LinkedHashMap<String, Record>()
             var manifestBytes: ByteArray? = null
@@ -164,7 +170,7 @@ internal object BackupContainerV3 {
                     }
                     val digest = MessageDigest.getInstance("SHA-256")
                     var size = 0L
-                    val buffer = ByteArray(256 * 1024)
+                    val buffer = ByteArray(ioBufferSize())
                     while (true) {
                         val count = zip.read(buffer)
                         if (count < 0) break
@@ -175,7 +181,7 @@ internal object BackupContainerV3 {
                 }
                 zip.closeEntry()
             }
-            val drain = ByteArray(256 * 1024)
+            val drain = ByteArray(ioBufferSize())
             while (plaintext.read(drain) >= 0) { /* force final segment authentication */ }
             zip.close()
             val parsed = decodeManifest(manifestBytes ?: throw BackupContainerException("Backup manifest is missing."))
