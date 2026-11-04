@@ -399,9 +399,9 @@ Maintain:
 
 - [x] Product scope and target environment recorded.
 - [x] Architecture, safety boundaries, security principles, and roadmap defined.
-- [ ] Master plan committed and verified in GitHub.
-- [ ] M0.1 repository reconnaissance.
-- [ ] M0.2 buildable project foundation.
-- [ ] M0.3 CI and supporting documentation.
+- [x] Master plan committed and verified in GitHub.
+- [x] M0.1 repository reconnaissance (initial repository was empty apart from this plan).
+- [ ] M0.2 buildable project foundation (initial Compose app skeleton committed; CI verification pending).
+- [ ] M0.3 CI and supporting documentation (baseline docs and workflow committed; CI verification pending).
 
 **Next action:** complete M0.1 repository reconnaissance, then implement only the minimum verified M0.2 foundation.
