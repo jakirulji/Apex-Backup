@@ -457,7 +457,7 @@ private fun ApexBackupApp() {
                                     } catch (error: Exception) {
                                         verifyMessage = "Verification failed: ${error.message ?: "unknown error"}"
                                     } finally {
-                                        password.fill('\\u0000')
+                                        password.fill(0.toChar())
                                         verifyPassphrase = ""
                                         verifyProgressBytes = verifyBytesCounter.get()
                                         verifyBusy = false
