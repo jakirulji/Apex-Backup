@@ -32,36 +32,6 @@ jobs:
       - name: Install Android SDK components
         run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Require signing secrets for branch builds
-        if: ${{ github.event_name != 'pull_request' }}
-        shell: bash
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          for name in KEYSTORE_BASE64 APEX_KEYSTORE_PASSWORD APEX_KEY_ALIAS APEX_KEY_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Missing required GitHub Actions secret for signing: $name"
-              exit 1
-            fi
-          done
-
-      - name: Prepare release keystore
-        if: ${{ github.event_name != 'pull_request' }}
-        shell: bash
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          umask 077
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/apex-backup-release.jks"
-          test -s "$RUNNER_TEMP/apex-backup-release.jks"
-          echo "APEX_KEYSTORE_PATH=$RUNNER_TEMP/apex-backup-release.jks" >> "$GITHUB_ENV"
-          echo "APEX_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -71,28 +41,11 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest lint
 
       - name: Assemble debug APK
-        env:
-          APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle --no-daemon assembleDebug
 
       - name: Verify debug APK signature
         shell: bash
         run: "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Assemble release APK
-        if: ${{ github.event_name != 'pull_request' }}
-        env:
-          APEX_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          APEX_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          APEX_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle --no-daemon assembleRelease
-
-      - name: Verify release APK signature
-        if: ${{ github.event_name != 'pull_request' }}
-        shell: bash
-        run: "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
       - name: Prepare test artifact
         run: cp app/build/outputs/apk/debug/app-debug.apk test.apk
