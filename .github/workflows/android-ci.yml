@@ -78,7 +78,7 @@ jobs:
 
       - name: Verify release APK signature
         if: ${{ env.KEYSTORE_BASE64 != '' }}
-        run: apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-release-unsigned.apk
+        run: apksigner verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
 
       - name: Prepare test artifact
         run: cp app/build/outputs/apk/debug/app-debug.apk test.apk
