@@ -4,8 +4,8 @@
 |---|---|
 | M0 — Repository and build foundation | Complete |
 | M1 — Device/root/storage diagnostics | Device-validated; CI verification tracked in Actions |
-| M2 — App inventory and APK export | Implemented; CI and device validation pending |
-| M3 — Encrypted repository format | Not started |
+| M2 — App inventory and APK export | Implemented; CI and device validation confirmed |
+| M3 — Encrypted repository format | Implemented; CI and device validation pending |
 | M4 — App-data backup | Not started |
 | M5 — Same-ROM restore | Not started |
 | M6 — System configuration adapters | Not started |
@@ -20,8 +20,8 @@
 - [x] Android project foundation and CI.
 - [x] Permanent JKS signing configured.
 - [x] CI validates the signed release APK.
-- [x] CI publishes one user-facing APK: `Apex Backup.apk`.
-- [x] Test/debug APK is no longer uploaded as a separate artifact.
+- [x] CI publishes one user-facing APK: \`Apex Backup.apk\`.
+- [x] Test/debug APK is not uploaded as a separate artifact.
 
 ## M1 — Device/root/storage diagnostics
 
@@ -30,23 +30,36 @@
 - [x] Explicit user-triggered root check; no root prompt at app launch.
 - [x] Bounded root command execution and fixed read-only commands.
 - [x] Magisk version, SELinux mode and Android encryption properties when root is granted.
-- [x] User has confirmed that device information is displayed correctly.
-- [x] CI verification is tracked in the corresponding GitHub Actions run.
+- [x] User confirmed that device information is displayed correctly.
+- [x] CI verification completed.
 
 ## M2 — App inventory and APK export
 
 - [x] Enumerate installed applications using Android package visibility permission.
 - [x] Display app label, package name, version, user/system classification and readable APK file count.
-- [x] Search by app label or package name.
-- [x] Filter all/user/system apps and select multiple apps.
-- [x] Export selected base and split APK files into a ZIP using Android's system document picker.
+- [x] Search, filter and multi-select installed apps.
+- [x] Export selected base and split APK files into a ZIP using the system document picker.
 - [x] Export runs off the main thread and reports errors.
-- [x] Clearly disclose that APK export does not include private app data, accounts, login sessions or app settings.
-- [ ] Verify CI and signed release APK.
-- [ ] Validate package visibility and APK export on Redmi Note 9 Pro / Evolution X 17.
+- [x] Clearly disclose that APK export excludes private app data, accounts, sessions and settings.
+- [x] CI, signed APK build and device inventory/export validation confirmed.
 
-M2 does not back up or restore private app data. APK export is not a complete application backup.
+M2 APK ZIP export is not a complete application backup.
+
+## M3 — Encrypted backup container
+
+- [x] Define versioned binary container header and authenticated format metadata.
+- [x] Derive portable encryption keys with Argon2id (v1 parameters: 3 iterations, 64 MiB, parallelism 1).
+- [x] Encrypt ZIP payload using AES-256-GCM with the complete header as authenticated additional data.
+- [x] Include a final manifest with archive paths, byte sizes and SHA-256 digests.
+- [x] Stream APK files into the encrypted container; do not create a plaintext intermediate archive.
+- [x] Verify password, GCM authentication tag, manifest and per-file SHA-256 digests.
+- [x] Reject unsafe paths, duplicate entries, unsupported KDF parameters and malformed manifests.
+- [x] Add UI to create encrypted APK containers and verify an existing container through SAF.
+- [ ] CI tests, lint, signed release build and signature verification.
+- [ ] Device validation on Redmi Note 9 Pro / Evolution X 17, including wrong-password and damaged-file checks.
+
+M3 currently encrypts APK files only. It does not yet capture private app data, accounts, sessions, permissions or system settings.
 
 ## Next
 
-M3 defines and tests the versioned encrypted backup container before any private app data is read or copied.
+M4 will add carefully scoped, root-gated private app-data capture. It must use the M3 container and report captured, skipped, failed and unsupported items separately. Restore remains deferred until backup capture and verification are reliable.

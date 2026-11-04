@@ -44,7 +44,6 @@ android {
 
     buildTypes {
         debug {
-            // Use the permanent app key when available so test APKs can update releases.
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -93,6 +92,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.83")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

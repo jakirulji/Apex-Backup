@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.apex.backup.diagnostics.DeviceInfo
 import com.apex.backup.diagnostics.RootDiagnostics
@@ -46,6 +47,8 @@ import com.apex.backup.diagnostics.StorageInfo
 import com.apex.backup.inventory.InstalledApp
 import com.apex.backup.inventory.PackageApkExporter
 import com.apex.backup.inventory.PackageInventory
+import com.apex.backup.security.BackupContainer
+import com.apex.backup.security.BackupFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -77,9 +80,21 @@ private fun ApexBackupApp() {
     var searchQuery by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf(AppFilter.ALL) }
     val selectedPackages = remember { mutableStateListOf<String>() }
+
     var exportLoading by remember { mutableStateOf(false) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var pendingExportApps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
+
+    var backupPassphrase by remember { mutableStateOf("") }
+    var backupPassphraseConfirm by remember { mutableStateOf("") }
+    var backupBusy by remember { mutableStateOf(false) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var pendingBackupFiles by remember { mutableStateOf<List<BackupFile>>(emptyList()) }
+
+    var verifyPassphrase by remember { mutableStateOf("") }
+    var verifyBusy by remember { mutableStateOf(false) }
+    var verifyMessage by remember { mutableStateOf<String?>(null) }
+    var verifyUri by remember { mutableStateOf<Uri?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -93,13 +108,49 @@ private fun ApexBackupApp() {
                 }
                 exportLoading = false
                 exportMessage = if (result.error == null) {
-                    "Exported ${result.exportedApps} apps / ${result.exportedApkFiles} APK files " +
-                        "(${formatBytes(result.bytesWritten)}). APKs only; app data is not included."
+                    "Exported \${result.exportedApps} apps / \${result.exportedApkFiles} APK files " +
+                        "(\${formatBytes(result.bytesWritten)}). APKs only; app data is not included."
                 } else {
-                    "Export failed: ${result.error}"
+                    "Export failed: \${result.error}"
                 }
             }
         }
+    }
+
+    val encryptedBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch {
+                backupBusy = true
+                backupMessage = "Encrypting selected APK files…"
+                val password = backupPassphrase.toCharArray()
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val output = context.contentResolver.openOutputStream(uri)
+                            ?: error("Could not open the selected destination.")
+                        BackupContainer.create(output, pendingBackupFiles, password)
+                    }
+                }
+                backupPassphrase = ""
+                backupPassphraseConfirm = ""
+                backupBusy = false
+                backupMessage = result.fold(
+                    onSuccess = {
+                        "Encrypted backup created and authenticated: \${it.fileCount} files, " +
+                            "\${formatBytes(it.totalBytes)}. Keep the passphrase safe."
+                    },
+                    onFailure = { "Backup failed: \${it.message ?: "unknown error"}" }
+                )
+            }
+        }
+    }
+
+    val verifyPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        verifyUri = uri
+        verifyMessage = if (uri == null) null else "Backup selected. Enter its passphrase and verify."
     }
 
     LaunchedEffect(Unit) {
@@ -155,7 +206,7 @@ private fun ApexBackupApp() {
                     InfoRow("Manufacturer", device.manufacturer)
                     InfoRow("Model", device.model)
                     InfoRow("Device codename", device.device)
-                    InfoRow("Android", "${device.androidVersion} (API ${device.apiLevel})")
+                    InfoRow("Android", "\${device.androidVersion} (API \${device.apiLevel})")
                     InfoRow("Security patch", device.securityPatch)
                     InfoRow("Build", device.buildDisplay)
                     InfoRow("Fingerprint", device.fingerprint)
@@ -229,7 +280,7 @@ private fun ApexBackupApp() {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("${selectedPackages.size} selected")
+                        Text("\${selectedPackages.size} selected")
                         OutlinedButton(
                             onClick = {
                                 val visible = visibleApps.map { it.packageName }
@@ -278,7 +329,7 @@ private fun ApexBackupApp() {
                         onClick = {
                             pendingExportApps = apps.filter { it.packageName in selectedPackages }
                             val fileName = if (pendingExportApps.size == 1) {
-                                "${pendingExportApps.first().packageName}.zip"
+                                "\${pendingExportApps.first().packageName}.zip"
                             } else {
                                 "Apex-Backup-APKs.zip"
                             }
@@ -297,10 +348,117 @@ private fun ApexBackupApp() {
                     )
                 }
 
+                InfoCard("Encrypted backup (M3)") {
+                    Text(
+                        "Create a password-protected .apexbackup container from the selected apps' " +
+                            "base and split APK files. This milestone does not include private app data."
+                    )
+                    OutlinedTextField(
+                        value = backupPassphrase,
+                        onValueChange = { backupPassphrase = it },
+                        label = { Text("New backup passphrase (12+ characters)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = backupPassphraseConfirm,
+                        onValueChange = { backupPassphraseConfirm = it },
+                        label = { Text("Confirm passphrase") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            val chosen = apps.filter { it.packageName in selectedPackages }
+                            pendingBackupFiles = chosen.flatMap { app ->
+                                val safeVersion = app.versionName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                                app.apkFiles.mapIndexed { index, file ->
+                                    val name = if (index == 0) "base.apk" else "split-$index.apk"
+                                    BackupFile("apps/\${app.packageName}/$safeVersion/$name", file)
+                                }
+                            }
+                            if (pendingBackupFiles.isEmpty()) {
+                                backupMessage = "Selected apps have no readable APK files."
+                            } else {
+                                encryptedBackupLauncher.launch(
+                                    "Apex-Backup-\${System.currentTimeMillis()}.apexbackup"
+                                )
+                            }
+                        },
+                        enabled = selectedPackages.isNotEmpty() && !backupBusy &&
+                            backupPassphrase.length >= 12 &&
+                            backupPassphrase == backupPassphraseConfirm
+                    ) {
+                        Text("Create encrypted backup")
+                    }
+                    if (backupBusy) CircularProgressIndicator()
+                    backupMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+
+                    OutlinedButton(
+                        onClick = { verifyPicker.launch(arrayOf("*/*")) },
+                        enabled = !verifyBusy
+                    ) {
+                        Text("Choose backup to verify")
+                    }
+                    verifyUri?.let {
+                        Text("A backup file is selected.")
+                    }
+                    OutlinedTextField(
+                        value = verifyPassphrase,
+                        onValueChange = { verifyPassphrase = it },
+                        label = { Text("Backup passphrase") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            val uri = verifyUri
+                            if (uri != null) {
+                                scope.launch {
+                                    verifyBusy = true
+                                    verifyMessage = "Verifying encryption and file integrity…"
+                                    val password = verifyPassphrase.toCharArray()
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            val input = context.contentResolver.openInputStream(uri)
+                                                ?: error("Could not open the selected backup.")
+                                            BackupContainer.verify(input, password)
+                                        }
+                                    }
+                                    verifyPassphrase = ""
+                                    verifyBusy = false
+                                    verifyMessage = result.fold(
+                                        onSuccess = {
+                                            "Verified: \${it.fileCount} files, \${formatBytes(it.totalBytes)}. " +
+                                                "Authentication and SHA-256 checks passed."
+                                        },
+                                        onFailure = {
+                                            "Verification failed: \${it.message ?: "unknown error"}"
+                                        }
+                                    )
+                                }
+                            }
+                        },
+                        enabled = verifyUri != null && verifyPassphrase.length >= 12 && !verifyBusy
+                    ) {
+                        Text("Verify backup")
+                    }
+                    if (verifyBusy) CircularProgressIndicator()
+                    verifyMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    Text(
+                        "Use a unique passphrase and keep it somewhere safe. The app cannot recover " +
+                            "a forgotten passphrase. This container currently stores APK files only.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
                 InfoCard("Safety status") {
                     Text(
-                        "M2 only reads installed package metadata and exports APK files. " +
-                            "It does not copy private app data or modify installed apps."
+                        "M3 encrypts selected APK files. It does not yet back up private app data, " +
+                            "accounts, permissions, login sessions or system settings."
                     )
                 }
             }
@@ -323,8 +481,8 @@ private fun AppRow(
             Text(app.label, style = MaterialTheme.typography.bodyLarge)
             Text(app.packageName, style = MaterialTheme.typography.bodySmall)
             Text(
-                "v${app.versionName} • ${if (app.isSystemApp) "System" else "User"} app • " +
-                    "${app.apkCount} APK file(s)${if (app.enabled) "" else " • Disabled"}",
+                "v\${app.versionName} • \${if (app.isSystemApp) "System" else "User"} app • " +
+                    "\${app.apkCount} APK file(s)\${if (app.enabled) "" else " • Disabled"}",
                 style = MaterialTheme.typography.bodySmall
             )
         }
