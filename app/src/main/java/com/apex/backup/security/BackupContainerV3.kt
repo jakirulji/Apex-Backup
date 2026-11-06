@@ -227,6 +227,143 @@ internal object BackupContainerV3 {
         }
     }
 
+    /**
+     * Authenticates and extracts every payload entry into a new private directory.
+     * Nothing is published at the destination until the final streaming-AEAD segment
+     * and the manifest have both been verified.
+     */
+    fun extractToDirectory(
+        source: InputStream,
+        passphrase: CharArray,
+        destinationDirectory: File,
+        onProgress: (Long) -> Unit = {}
+    ): BackupSummary {
+        validatePassphrase(passphrase)
+        if (destinationDirectory.exists()) {
+            throw BackupContainerException("Extraction destination already exists.")
+        }
+        val parent = destinationDirectory.absoluteFile.parentFile
+            ?: throw BackupContainerException("Invalid extraction destination.")
+        if (!parent.isDirectory && !parent.mkdirs()) {
+            throw BackupContainerException("Could not create extraction parent directory.")
+        }
+        val staging = File(parent, "." + destinationDirectory.name + ".partial-" +
+            java.util.UUID.randomUUID().toString())
+        if (!staging.mkdir()) throw BackupContainerException("Could not create private staging directory.")
+        val tracked = ProgressInputStream(source, onProgress)
+        var key: ByteArray? = null
+        try {
+            val header = readHeader(tracked)
+            key = deriveKey(passphrase, header.salt)
+            val expectedVerifier = passwordVerifier(key, header.salt)
+            val matches = MessageDigest.isEqual(expectedVerifier, header.verifier)
+            expectedVerifier.fill(0)
+            if (!matches) throw BackupContainerException("Wrong passphrase.")
+
+            val unwrap = Cipher.getInstance("AES/GCM/NoPadding")
+            unwrap.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"),
+                GCMParameterSpec(TAG_BITS, header.wrapNonce))
+            unwrap.updateAAD(header.prefix)
+            val serializedKeyset = try {
+                unwrap.doFinal(header.wrappedKeyset)
+            } catch (e: Exception) {
+                throw BackupContainerException("Backup keyset authentication failed.", e)
+            }
+            initTink()
+            val keyset = try {
+                TinkProtoKeysetFormat.parseKeyset(serializedKeyset, InsecureSecretKeyAccess.get())
+            } finally {
+                serializedKeyset.fill(0)
+            }
+            val decrypted = keyset.getPrimitive(StreamingAead::class.java)
+                .newDecryptingStream(tracked, header.encoded)
+            val plaintext = decrypted.buffered(ioBufferSize())
+            val zip = ZipInputStream(plaintext)
+            val actual = LinkedHashMap<String, Record>()
+            var manifestBytes: ByteArray? = null
+            var manifestSeen = false
+            try {
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    if (entry.isDirectory) throw BackupContainerException("Directory entries are not allowed.")
+                    if (entry.name == MANIFEST) {
+                        if (manifestSeen) throw BackupContainerException("Duplicate manifest.")
+                        manifestSeen = true
+                        manifestBytes = readBounded(zip, MAX_MANIFEST)
+                    } else {
+                        if (manifestSeen) throw BackupContainerException("Manifest must be the final archive entry.")
+                        validatePath(entry.name)
+                        if (actual.size >= MAX_ENTRIES || actual.containsKey(entry.name)) {
+                            throw BackupContainerException("Too many or duplicate archive entries.")
+                        }
+                        val output = File(staging, entry.name)
+                        val canonicalRoot = staging.canonicalFile
+                        val canonicalOutput = output.canonicalFile
+                        if (!canonicalOutput.toPath().startsWith(canonicalRoot.toPath()) ||
+                            canonicalOutput == canonicalRoot) {
+                            throw BackupContainerException("Unsafe extraction path.")
+                        }
+                        val outputParent = output.parentFile
+                        if (outputParent == null || (!outputParent.isDirectory && !outputParent.mkdirs())) {
+                            throw BackupContainerException("Could not create extraction directory.")
+                        }
+                        val digest = MessageDigest.getInstance("SHA-256")
+                        var size = 0L
+                        output.outputStream().buffered(ioBufferSize()).use { fileOut ->
+                            val buffer = ByteArray(ioBufferSize())
+                            while (true) {
+                                val count = zip.read(buffer)
+                                if (count < 0) break
+                                fileOut.write(buffer, 0, count)
+                                digest.update(buffer, 0, count)
+                                size += count
+                            }
+                        }
+                        actual[entry.name] = Record(entry.name, size, digest.digest().hex())
+                    }
+                    zip.closeEntry()
+                }
+                val drain = ByteArray(ioBufferSize())
+                while (plaintext.read(drain) >= 0) { /* force final AEAD authentication */ }
+                zip.close()
+            } catch (e: Exception) {
+                runCatching { zip.close() }
+                throw e
+            }
+
+            val parsed = decodeManifest(
+                manifestBytes ?: throw BackupContainerException("Backup manifest is missing.")
+            )
+            if (parsed.second.size != actual.size) {
+                throw BackupContainerException("Backup contents do not match the manifest.")
+            }
+            parsed.second.forEach { expected ->
+                val found = actual[expected.path]
+                    ?: throw BackupContainerException("Missing file: " + expected.path)
+                if (found.size != expected.size ||
+                    !MessageDigest.isEqual(
+                        found.sha256.toByteArray(StandardCharsets.US_ASCII),
+                        expected.sha256.toByteArray(StandardCharsets.US_ASCII)
+                    )) {
+                    throw BackupContainerException("Integrity check failed: " + expected.path)
+                }
+            }
+            if (!staging.renameTo(destinationDirectory)) {
+                throw BackupContainerException("Could not finalize extracted backup.")
+            }
+            return BackupSummary(VERSION, parsed.first, actual.size, actual.values.sumOf { it.size })
+        } catch (e: BackupContainerException) {
+            throw e
+        } catch (e: Exception) {
+            throw BackupContainerException("Could not extract authenticated v3 backup: " +
+                (e.message ?: e.javaClass.simpleName), e)
+        } finally {
+            key?.fill(0)
+            passphrase.fill('\u0000')
+            staging.deleteRecursively()
+        }
+    }
+
     private data class Header(
         val prefix: ByteArray, val encoded: ByteArray, val salt: ByteArray,
         val wrapNonce: ByteArray, val verifier: ByteArray, val wrappedKeyset: ByteArray
