@@ -114,9 +114,10 @@ object RootAppDataCapture {
             )
         }
 
-        val metadata = buildMetadata(device, apps, appMetadata, results)
+        // This entry is written last. At this point every earlier TAR stream has reached EOF
+        // and its root process exit code has been checked, so READY can safely become CAPTURED.
         sources += BackupStreamSource("META-INF/app-data-metadata.json") {
-            metadata.byteInputStream(StandardCharsets.UTF_8)
+            buildMetadata(device, appMetadata, results).byteInputStream(StandardCharsets.UTF_8)
         }
 
         return PreparedAppDataCapture(
@@ -269,6 +270,10 @@ object RootAppDataCapture {
         }
 
         private fun finishAndCheck() {
+            if (isCancelled()) {
+                process.destroyForcibly()
+                throw InterruptedIOException("App-data capture was cancelled.")
+            }
             if (!finished.compareAndSet(false, true)) return
             watchdog.interrupt()
             try {
@@ -311,7 +316,6 @@ object RootAppDataCapture {
 
     private fun buildMetadata(
         device: DeviceInfo,
-        apps: List<InstalledApp>,
         appMetadata: List<Map<String, String>>,
         results: List<CaptureCategoryResult>
     ): String {
@@ -327,11 +331,21 @@ object RootAppDataCapture {
             }
         }
         val categoryJson = results.joinToString(",") { item ->
+            val finalStatus = when (item.status) {
+                "READY" -> "captured"
+                "NOT_PRESENT_OR_INACCESSIBLE" -> "skipped"
+                "EXCLUDED_BY_POLICY" -> "excluded"
+                else -> "unsupported"
+            }
             val fields = linkedMapOf(
                 "package" to item.packageName,
                 "category" to item.category,
-                "status" to item.status
+                "status" to finalStatus
             )
+            when (item.status) {
+                "NOT_PRESENT_OR_INACCESSIBLE" -> fields["reason"] = "not_present_or_inaccessible"
+                "EXCLUDED_BY_POLICY" -> fields["reason"] = "regenerable_cache_policy"
+            }
             item.archivePath?.let { fields["archive_path"] = it }
             fields.entries.joinToString(",", "{", "}") { (key, value) ->
                 "${quote(key)}:${quote(value)}"
