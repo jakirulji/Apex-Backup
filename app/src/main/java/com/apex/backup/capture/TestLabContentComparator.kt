@@ -28,8 +28,7 @@ object TestLabContentComparator {
         "databases/apex_lab.db",
         "files/apex-backup-test-lab/de-files.txt",
         "files/ApexBackupTestLab/external-fixture.txt",
-        "main.1.com.apex.backup.testlab.obb",
-        "cache/apex-lab-cache.tmp"
+        "main.1.com.apex.backup.testlab.obb"
     )
 
     fun compare(extractedRoot: File): ContentComparisonReport {
