@@ -58,7 +58,7 @@ internal object BackupContainerV3 {
 
     fun create(destination: OutputStream, files: List<BackupFile>, passphrase: CharArray): BackupSummary =
         createFromStreams(destination, files.map { file ->
-            BackupStreamSource(file.archivePath) { file.source.inputStream() }
+            BackupStreamSource(file.archivePath, { file.source.inputStream() }, compress = false)
         }, passphrase)
 
     fun createFromStreams(
@@ -99,9 +99,9 @@ internal object BackupContainerV3 {
             destination.flush()
             val encrypted = streamingAead.newEncryptingStream(destination, header)
             ZipOutputStream(encrypted).use { zip ->
-                // APKs are ZIP containers already; skip redundant compression to save CPU.
-                zip.setLevel(Deflater.NO_COMPRESSION)
                 sources.forEach { source ->
+                    // APKs are already compressed; TAR/metadata streams use fast DEFLATE to reduce size.
+                    zip.setLevel(if (source.compress) Deflater.BEST_SPEED else Deflater.NO_COMPRESSION)
                     zip.putNextEntry(ZipEntry(source.archivePath).apply { time = 0L })
                     val digest = MessageDigest.getInstance("SHA-256")
                     var size = 0L
