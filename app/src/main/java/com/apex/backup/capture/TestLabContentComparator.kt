@@ -1,7 +1,6 @@
 package com.apex.backup.capture
 
 import android.database.sqlite.SQLiteDatabase
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -124,7 +123,7 @@ object TestLabContentComparator {
             return
         }
         val actual = archive.files[path]
-        val valid = actual != null && actual.toString(StandardCharsets.UTF_8) == expected
+        val valid = actual != null && String(actual, StandardCharsets.UTF_8) == expected
         checks += ContentCheck(
             label, if (valid) "PASS" else "FAIL",
             if (valid) "Exact fixture content matched." else "Missing file or content mismatch: $path"
@@ -142,7 +141,7 @@ object TestLabContentComparator {
             return
         }
         val xml = archive.files["shared_prefs/apex_backup_test_lab.xml"]
-            ?.toString(StandardCharsets.UTF_8)
+            ?.let { String(it, StandardCharsets.UTF_8) }
         val valid = xml != null &&
             xml.contains("name=\"fixture_label\">$fixtureLabel</string>") &&
             xml.contains("name=\"fixture_version\" value=\"1\"") &&
