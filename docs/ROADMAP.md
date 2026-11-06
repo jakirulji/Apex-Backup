@@ -8,12 +8,13 @@
 | M3 — Encrypted backup container | v3 streaming engine; unified APK + app-data backup flow implemented; CI validation pending |
 | M4 — App-data capture | Root-gated capture integrated into the unified backup flow; disposable-device validation pending |
 | M5 — Same-ROM restore | Not started |
-| M6 — System config | Not started |
-| M7 — Storage targets | Not started |
-| M8 — History and incremental backups | Not started |
-| M9 — Cross-ROM migration | Not started |
-| M10 — Magisk migration | Not started |
-| M11 — Hardening and release | Not started |
+| M6 — Post-login settings restoration | Planned; depends on M5 safety foundation |
+| M7 — System configuration | Not started |
+| M8 — Storage targets | Not started |
+| M9 — History and incremental backups | Not started |
+| M10 — Cross-ROM migration | Not started |
+| M11 — Magisk migration | Not started |
+| M12 — Hardening and release | Not started |
 
 ## M0 — Build and signing
 
@@ -77,7 +78,7 @@ Design and safety requirements are tracked in [ADR-004: App-data capture](decisi
 - [x] Exclude root cache and code_cache directories; record exclusions and unavailable categories in authenticated metadata.
 - [x] Record package/version/signing-certificate identity, source device/ROM/API/ABI, Android user and category outcomes in authenticated metadata.
 - [x] Keep capture live and best-effort; never force-stop apps. The UI discloses that databases may change during capture.
-- [x] Report captured, skipped and policy-excluded categories; a TAR process failure aborts the backup instead of recording partial data as captured.
+- [x] Report captured, skipped and excluded categories; a TAR process failure aborts the backup instead of recording partial data as captured.
 - [x] Add an in-app TAR content comparator for CE/DE files, SharedPreferences XML, SQLite fixture rows, External/OBB payloads and cache exclusion; document the disposable-device procedure in [M4 testing](M4-TESTING.md).
 - [ ] Run the complete unified backup → encrypted extraction → content comparison flow with the disposable Test Lab on the target device; expected result is 14 PASS, 0 FAIL, 0 SKIP.
 
@@ -107,14 +108,39 @@ M4 is backup-only. It does not restore data or promise cross-ROM compatibility.
 - [ ] Verify dry-run output identifies each package and each category separately, including skipped/unsupported categories.
 - [ ] Record per-test results and require zero cross-app writes for M5 acceptance.
 
+M5 is the mandatory foundation for M6. M6 must not bypass M5's package identity, integrity, staging or isolation controls.
+
+## M6 — Post-login settings restoration
+
+Detailed design and safety boundaries are tracked in [ADR-005: Post-login settings restoration](decisions/ADR-005-post-login-settings-restoration.md).
+
+**Goal:** After the user installs or opens an app and signs in normally, Apex Backup can re-apply only those local settings that have been proven safe and recoverable for that specific app/version.
+
+- [ ] Build an app-specific adapter framework; do not assume settings have a common format or location across apps.
+- [ ] Keep settings restoration separate from raw app-data restore. Never overwrite a newly established login session with old app-private state.
+- [ ] Require the user to sign in through the app's official UI. Never capture, export, inject or restore passwords, cookies, OAuth tokens, session databases, device-bound keys or other authentication material.
+- [ ] Use an explicit user confirmation step (for example, “I'm signed in”) before applying post-login settings. Do not rely on inaccessible or unreliable automatic login-state detection.
+- [ ] Classify each setting per app and version as **Automatic** (verified safe local preference), **Assisted** (user review/confirmation required), **Manual/Unsupported** (must be configured by the user or is not safely recoverable).
+- [ ] Capture only allow-listed, documented or experimentally verified local preferences; never copy an entire preferences database or opaque app-data directory by default.
+- [ ] Detect app package, signing certificate and version; adapters must declare supported version ranges and fail closed on unknown/incompatible versions.
+- [ ] Prefer app-owned official export/import APIs or documented mechanisms when available. Treat server-synced settings as account-provided and avoid redundant local copying.
+- [ ] Provide a preview/dry-run of settings to be applied, per-setting outcomes, cancellation and rollback where technically safe.
+- [ ] Keep app-specific limitations explicit. Social apps such as Facebook and Instagram may store many preferences server-side; do not promise local restoration where account sync already owns the setting or no safe adapter exists.
+- [ ] Keep WhatsApp chat backup/restore under WhatsApp's official process; Apex Backup must not replace it or claim to restore chats through settings adapters.
+- [ ] Start with one disposable/test app and synthetic preferences; add a real-app adapter only after version-specific behavior and post-login safety are demonstrated.
+- [ ] Test that a fresh successful login remains valid after settings restoration and that no old token/session material is imported.
+- [ ] Report restored, skipped, unsupported and failed settings separately; never mark an unverified setting as restored.
+
+**M6 non-goals:** automatic login, account/session migration, server-side account settings extraction, bypassing app security, universal settings restoration for every app, or replacing official chat/cloud backup.
+
 ## Later milestones
 
-- **M6 — System configuration:** allow-listed, version-aware adapters only; no blind system database copying.
-- **M7 — Storage targets:** SAF internal folders, removable SD and portable PC transfer with post-write verification.
-- **M8 — History and incremental backups:** operation history, deduplication and incremental chunks.
-- **M9 — Cross-ROM migration:** compatibility engine and controlled test matrix; block unsafe transfers.
-- **M10 — Magisk migration:** inventory/export first; explicit compatibility review before any installation.
-- **M11 — Hardening and release:** security review, device matrix, documentation and verified release.
+- **M7 — System configuration:** allow-listed, version-aware adapters only; no blind system database copying.
+- **M8 — Storage targets:** SAF internal folders, removable SD and portable PC transfer with post-write verification.
+- **M9 — History and incremental backups:** operation history, deduplication and incremental chunks.
+- **M10 — Cross-ROM migration:** compatibility engine and controlled test matrix; block unsafe transfers.
+- **M11 — Magisk migration:** inventory/export first; explicit compatibility review before any installation.
+- **M12 — Hardening and release:** security review, device matrix, documentation and verified release.
 
 ## Working rules
 
