@@ -102,7 +102,7 @@ class BackupContainerTest {
             }),
             "correct horse battery staple".toCharArray()
         )
-        val parent = createTempDir(prefix = "apex-extract-parent")
+        val parent = java.nio.file.Files.createTempDirectory("apex-extract-parent").toFile()
         val destination = File(parent, "recovered")
         try {
             val summary = BackupContainer.extractToDirectory(
@@ -127,7 +127,7 @@ class BackupContainerTest {
             }),
             "correct horse battery staple".toCharArray()
         )
-        val parent = createTempDir(prefix = "apex-extract-wrong")
+        val parent = java.nio.file.Files.createTempDirectory("apex-extract-wrong").toFile()
         val destination = File(parent, "recovered")
         try {
             assertThrows(BackupContainerException::class.java) {
