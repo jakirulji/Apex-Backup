@@ -451,10 +451,16 @@ private fun ApexBackupApp() {
                                             pendingBackupStreams = prepared.sources
                                             pendingBackupFiles = emptyList()
                                             val ready = prepared.results.count { it.status == "READY" }
-                                            val skipped = prepared.results.size - ready
+                                            val skipped = prepared.results.count {
+                                                it.status == "NOT_PRESENT_OR_INACCESSIBLE"
+                                            }
+                                            val excluded = prepared.results.count {
+                                                it.status == "EXCLUDED_BY_POLICY"
+                                            }
                                             backupMessage =
                                                 "Prepared ${prepared.packageCount} app(s): ${ready} data categories ready, " +
-                                                "${skipped} missing/inaccessible. Choose where to save the encrypted backup."
+                                                "${skipped} missing/inaccessible, ${excluded} cache paths excluded. " +
+                                                "Choose where to save the encrypted backup."
                                             encryptedBackupLauncher.launch(
                                                 "Apex-App-Data-${System.currentTimeMillis()}.apexbackup"
                                             )
