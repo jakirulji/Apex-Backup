@@ -204,6 +204,7 @@ object TestLabContentComparator {
             val size = parseOctal(header, 124, 12)
             val type = header[156].toInt().toChar()
             if (type == '\u0000' || type == '0') {
+                if (path.isEmpty()) throw IOException("TAR file entry has an empty path.")
                 paths += path
                 if (path in expectedEntries) {
                     if (size > MAX_CAPTURED_ENTRY) {
@@ -229,8 +230,11 @@ object TestLabContentComparator {
             throw IOException("Absolute TAR path rejected.")
         }
         val parts = raw.split('/').filter { it.isNotEmpty() && it != "." }
-        if (parts.isEmpty() || parts.any { it == ".." }) {
+        if (parts.any { it == ".." }) {
             throw IOException("Unsafe TAR path rejected.")
+        }
+        if (parts.isEmpty() && raw.trim('/') != ".") {
+            throw IOException("Empty TAR path rejected.")
         }
         return parts.joinToString("/")
     }
