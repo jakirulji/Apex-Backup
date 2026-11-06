@@ -709,8 +709,8 @@ private fun ApexBackupApp() {
 
                 InfoCard("Safety status") {
                     Text(
-                        "M4 backs up selected app data with root using best-effort live capture. Restore is not implemented; " +
-                            "accounts, runtime sessions, permissions and system configuration are not guaranteed."
+                        "Unified encrypted backups include selected APKs and supported app data through root using best-effort live capture. " +
+                            "Restore is not implemented; accounts, runtime sessions, permissions and system configuration are not guaranteed."
                     )
                 }
             }
