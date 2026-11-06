@@ -139,6 +139,7 @@ private fun ApexBackupApp() {
     ) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
+                val backupJob = currentCoroutineContext()[Job]
                 val isM4Backup = pendingBackupStreams.isNotEmpty()
                 backupBusy = true
                 backupMessage = if (isM4Backup) {
@@ -153,7 +154,9 @@ private fun ApexBackupApp() {
                             ?: error("Could not open the selected destination.")
                         output.use {
                             if (pendingBackupStreams.isNotEmpty()) {
-                                BackupContainer.createFromStreams(it, pendingBackupStreams, password)
+                                BackupContainer.createFromStreams(it, pendingBackupStreams, password) {
+                                    backupJob?.isActive != true
+                                }
                             } else {
                                 BackupContainer.create(it, pendingBackupFiles, password)
                             }
