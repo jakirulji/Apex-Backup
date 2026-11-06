@@ -68,6 +68,46 @@ class BackupContainerTest {
     }
 
     @Test
+    fun oneShotStreamSourceIsEncryptedAndVerified() {
+        val payload = ByteArray(256 * 1024) { (it % 251).toByte() }
+        var opened = 0
+        val output = ByteArrayOutputStream()
+        val created = BackupContainer.createFromStreams(
+            output,
+            listOf(BackupStreamSource("app-data/example.app/ce.tar") {
+                opened++
+                ByteArrayInputStream(payload)
+            }),
+            "correct horse battery staple".toCharArray()
+        )
+        val verified = BackupContainer.verify(
+            ByteArrayInputStream(output.toByteArray()),
+            "correct horse battery staple".toCharArray()
+        )
+        assertEquals(1, opened)
+        assertEquals(1, created.fileCount)
+        assertEquals(payload.size.toLong(), created.totalBytes)
+        assertEquals(created.totalBytes, verified.totalBytes)
+        assertEquals(created.createdAt, verified.createdAt)
+    }
+
+    @Test
+    fun streamedSourceRejectsPathTraversalBeforeOpening() {
+        var opened = false
+        assertThrows(BackupContainerException::class.java) {
+            BackupContainer.createFromStreams(
+                ByteArrayOutputStream(),
+                listOf(BackupStreamSource("../escape.tar") {
+                    opened = true
+                    ByteArrayInputStream(byteArrayOf(1))
+                }),
+                "correct horse battery staple".toCharArray()
+            )
+        }
+        assertTrue(!opened)
+    }
+
+    @Test
     fun wrongPasswordIsRejected() {
         val source = File.createTempFile("apex-source", ".apk")
         try {
