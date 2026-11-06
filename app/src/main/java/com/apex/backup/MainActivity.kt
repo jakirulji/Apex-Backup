@@ -99,6 +99,7 @@ private fun ApexBackupApp() {
     var backupPassphraseConfirm by remember { mutableStateOf("") }
     var backupBusy by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
+    var m4Message by remember { mutableStateOf<String?>(null) }
     var pendingBackupFiles by remember { mutableStateOf<List<BackupFile>>(emptyList()) }
     var pendingBackupStreams by remember { mutableStateOf<List<BackupStreamSource>>(emptyList()) }
 
@@ -566,7 +567,7 @@ private fun ApexBackupApp() {
                             val root = rootResult
                             val chosen = apps.filter { it.packageName in selectedPackages }
                             if (root?.isRoot != true) {
-                                backupMessage = "Check root access first and grant Apex Backup permission in Magisk."
+                                m4Message = "Check root access first and grant Apex Backup permission in Magisk."
                             } else if (chosen.isEmpty()) {
                                 backupMessage = "Select at least one app in Installed apps."
                             } else if (backupPassphrase.length < 12 ||
@@ -619,7 +620,7 @@ private fun ApexBackupApp() {
                         Text("Prepare encrypted app-data backup")
                     }
                     if (backupBusy) CircularProgressIndicator()
-                    backupMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    m4Message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 }
 
                 InfoCard("Safety status") {
