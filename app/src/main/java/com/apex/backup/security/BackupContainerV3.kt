@@ -58,7 +58,7 @@ internal object BackupContainerV3 {
 
     fun create(destination: OutputStream, files: List<BackupFile>, passphrase: CharArray): BackupSummary =
         createFromStreams(destination, files.map { file ->
-            BackupStreamSource(file.archivePath, { file.source.inputStream() }, compress = false)
+            BackupStreamSource(file.archivePath, compress = false) { file.source.inputStream() }
         }, passphrase)
 
     fun createFromStreams(
