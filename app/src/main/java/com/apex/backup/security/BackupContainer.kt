@@ -69,6 +69,16 @@ object BackupContainer {
         passphrase: CharArray
     ): BackupSummary = BackupContainerV3.create(destination, files, passphrase)
 
+    /**
+     * Writes one-shot streams directly into the encrypted v3 container. Sources are opened
+     * sequentially and closed immediately after their ZIP entry has been consumed.
+     */
+    fun createFromStreams(
+        destination: OutputStream,
+        sources: List<BackupStreamSource>,
+        passphrase: CharArray
+    ): BackupSummary = BackupContainerV3.createFromStreams(destination, sources, passphrase)
+
     fun verify(
         source: InputStream,
         passphrase: CharArray,
