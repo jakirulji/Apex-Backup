@@ -105,7 +105,7 @@ object BackupContainer {
             DataInputStream(ByteArrayInputStream(prefix, 8, 4)).readInt()
         } else -1
         if (version != FORMAT_VERSION) {
-            passphrase.fill('\\u0000')
+            passphrase.fill('\u0000')
             throw BackupContainerException("Extraction currently supports authenticated v3 backups only.")
         }
         return BackupContainerV3.extractToDirectory(
