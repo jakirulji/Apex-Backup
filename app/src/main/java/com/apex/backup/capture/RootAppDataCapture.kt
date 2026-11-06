@@ -82,7 +82,7 @@ object RootAppDataCapture {
                 val name = if (index == 0) "base.apk" else "split-$index.apk"
                 sources += BackupStreamSource(
                     "apps/${app.packageName}/apk/$name"
-                ) { file.inputStream() }
+                ) { _ -> file.inputStream() }
             }
 
             results += CaptureCategoryResult(app.packageName, "CACHE", "EXCLUDED_BY_POLICY")
@@ -93,8 +93,8 @@ object RootAppDataCapture {
                 val present = probeDirectory(path, isCancelled)
                 val archivePath = "app-data/${app.packageName}/${category.name.lowercase()}.tar"
                 if (present) {
-                    sources += BackupStreamSource(archivePath) {
-                        openTarStream(path, isCancelled)
+                    sources += BackupStreamSource(archivePath) { cancelled ->
+                        openTarStream(path, cancelled)
                     }
                     results += CaptureCategoryResult(
                         app.packageName, category.name, "READY", archivePath
@@ -116,7 +116,7 @@ object RootAppDataCapture {
 
         // This entry is written last. At this point every earlier TAR stream has reached EOF
         // and its root process exit code has been checked, so READY can safely become CAPTURED.
-        sources += BackupStreamSource("META-INF/app-data-metadata.json") {
+        sources += BackupStreamSource("META-INF/app-data-metadata.json") { _ ->
             buildMetadata(device, appMetadata, results).byteInputStream(StandardCharsets.UTF_8)
         }
 
