@@ -82,6 +82,37 @@ object BackupContainer {
         destination, sources, passphrase, isCancelled
     )
 
+    /**
+     * Extracts a v3 container into a new directory only after authentication and
+     * every manifest checksum have passed. Legacy containers remain verify-only.
+     */
+    fun extractToDirectory(
+        source: InputStream,
+        passphrase: CharArray,
+        destinationDirectory: File,
+        onProgress: (Long) -> Unit = {}
+    ): BackupSummary {
+        val probe = java.io.PushbackInputStream(source, 12)
+        val prefix = ByteArray(12)
+        var count = 0
+        while (count < prefix.size) {
+            val read = probe.read(prefix, count, prefix.size - count)
+            if (read < 0) break
+            count += read
+        }
+        if (count > 0) probe.unread(prefix, 0, count)
+        val version = if (count == 12) {
+            DataInputStream(ByteArrayInputStream(prefix, 8, 4)).readInt()
+        } else -1
+        if (version != FORMAT_VERSION) {
+            passphrase.fill('\\u0000')
+            throw BackupContainerException("Extraction currently supports authenticated v3 backups only.")
+        }
+        return BackupContainerV3.extractToDirectory(
+            probe, passphrase, destinationDirectory, onProgress
+        )
+    }
+
     fun verify(
         source: InputStream,
         passphrase: CharArray,
