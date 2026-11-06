@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.apex.backup.capture.RootAppDataCapture
 import com.apex.backup.diagnostics.DeviceInfo
 import com.apex.backup.diagnostics.RootDiagnostics
 import com.apex.backup.diagnostics.RootDiagnosticsRunner
@@ -52,8 +53,11 @@ import com.apex.backup.inventory.PackageApkExporter
 import com.apex.backup.inventory.PackageInventory
 import com.apex.backup.security.BackupContainer
 import com.apex.backup.security.BackupFile
+import com.apex.backup.security.BackupStreamSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -96,6 +100,7 @@ private fun ApexBackupApp() {
     var backupBusy by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
     var pendingBackupFiles by remember { mutableStateOf<List<BackupFile>>(emptyList()) }
+    var pendingBackupStreams by remember { mutableStateOf<List<BackupStreamSource>>(emptyList()) }
 
     var verifyPassphrase by remember { mutableStateOf("") }
     var verifyBusy by remember { mutableStateOf(false) }
@@ -134,14 +139,22 @@ private fun ApexBackupApp() {
         if (uri != null) {
             scope.launch {
                 backupBusy = true
-                backupMessage = "Encrypting selected APK files…"
+                backupMessage = if (pendingBackupStreams.isNotEmpty()) {
+                    "Encrypting APK and app-data streams…"
+                } else {
+                    "Encrypting selected APK files…"
+                }
                 val password = backupPassphrase.toCharArray()
                 val result = withContext(Dispatchers.IO) {
                     runCatching {
                         val output = context.contentResolver.openOutputStream(uri)
                             ?: error("Could not open the selected destination.")
                         output.use {
-                            BackupContainer.create(it, pendingBackupFiles, password)
+                            if (pendingBackupStreams.isNotEmpty()) {
+                                BackupContainer.createFromStreams(it, pendingBackupStreams, password)
+                            } else {
+                                BackupContainer.create(it, pendingBackupFiles, password)
+                            }
                         }
                     }
                 }
@@ -156,6 +169,9 @@ private fun ApexBackupApp() {
                     onFailure = { "Backup failed: ${it.message ?: "unknown error"}" }
                 )
             }
+        } else {
+            pendingBackupStreams = emptyList()
+            pendingBackupFiles = emptyList()
         }
     }
 
@@ -385,6 +401,73 @@ private fun ApexBackupApp() {
                     )
                 }
 
+                InfoCard("Private app data backup (M4)") {
+                    Text(
+                        "Backs up selected apps' APKs plus supported CE, DE, app-specific External and OBB " +
+                            "directories. Root is required. Cache and code_cache are excluded."
+                    )
+                    InfoRow(
+                        "Root",
+                        when {
+                            rootLoading -> "Checking…"
+                            rootResult?.isRoot == true -> "Granted"
+                            rootResult == null -> "Check root first"
+                            else -> "Unavailable"
+                        }
+                    )
+                    InfoRow("Selected apps", selectedPackages.size.toString())
+                    Text(
+                        "Live best-effort capture: apps will not be force-stopped. Data may change while " +
+                            "being read. Missing or inaccessible categories are recorded in metadata.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(
+                        onClick = {
+                            val root = rootResult
+                            val chosen = apps.filter { it.packageName in selectedPackages }
+                            if (root?.isRoot != true) {
+                                backupMessage = "Check root access first and grant Apex Backup permission in Magisk."
+                            } else if (chosen.isEmpty()) {
+                                backupMessage = "Select at least one app in Installed apps."
+                            } else if (backupPassphrase.length < 12 ||
+                                backupPassphrase != backupPassphraseConfirm) {
+                                backupMessage = "Enter matching passphrases of at least 12 characters."
+                            } else {
+                                backupBusy = true
+                                backupMessage = "Checking app-data directories through root…"
+                                scope.launch {
+                                    val job = currentCoroutineContext()[Job]
+                                    val prepared = withContext(Dispatchers.IO) {
+                                        RootAppDataCapture.prepare(
+                                            chosen,
+                                            context.packageManager,
+                                            device
+                                        ) { job?.isActive != true }
+                                    }
+                                    backupBusy = false
+                                    if (prepared.sources.isNotEmpty()) {
+                                        pendingBackupStreams = prepared.sources
+                                        pendingBackupFiles = emptyList()
+                                        val ready = prepared.results.count { it.status == "READY" }
+                                        val skipped = prepared.results.size - ready
+                                        backupMessage =
+                                            "Prepared ${prepared.packageCount} app(s): ${ready} data categories ready, " +
+                                            "${skipped} missing/inaccessible. Choose where to save the encrypted backup."
+                                        encryptedBackupLauncher.launch(
+                                            "Apex-App-Data-${System.currentTimeMillis()}.apexbackup"
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        enabled = selectedPackages.isNotEmpty() && !backupBusy && !rootLoading
+                    ) {
+                        Text("Prepare encrypted app-data backup")
+                    }
+                    if (backupBusy) CircularProgressIndicator()
+                    backupMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                }
+
                 InfoCard("Encrypted backup (M3)") {
                     Text(
                         "Create a password-protected .apexbackup container from the selected apps' " +
@@ -409,6 +492,7 @@ private fun ApexBackupApp() {
                     Button(
                         onClick = {
                             val chosen = apps.filter { it.packageName in selectedPackages }
+                            pendingBackupStreams = emptyList()
                             pendingBackupFiles = chosen.flatMap { app ->
                                 val safeVersion = app.versionName.replace(Regex("[^A-Za-z0-9._-]"), "_")
                                 app.apkFiles.mapIndexed { index, file ->
@@ -524,8 +608,8 @@ private fun ApexBackupApp() {
 
                 InfoCard("Safety status") {
                     Text(
-                        "M3 encrypts selected APK files. It does not yet back up private app data, " +
-                            "accounts, permissions, login sessions or system settings."
+                        "M4 backs up selected app data with root using best-effort live capture. Restore is not implemented; " +
+                            "accounts, runtime sessions, permissions and system configuration are not guaranteed."
                     )
                 }
             }
