@@ -75,7 +75,8 @@ Design and safety requirements are tracked in [ADR-004: App-data capture](decisi
 - [x] Record package/version/signing-certificate identity, source device/ROM/API/ABI, Android user and category outcomes in authenticated metadata.
 - [x] Keep capture live and best-effort; never force-stop apps. The UI discloses that databases may change during capture.
 - [x] Report captured, skipped and policy-excluded categories; a TAR process failure aborts the backup instead of recording partial data as captured.
-- [ ] Validate CE, DE, SharedPreferences, Database, External and OBB capture with the disposable Test Lab on the target device; verify the resulting encrypted container.
+- [x] Add an in-app TAR content comparator for CE/DE files, SharedPreferences XML, SQLite fixture rows, External/OBB payloads and cache exclusion; document the disposable-device procedure in [M4 testing](M4-TESTING.md).
+- [ ] Run the complete capture → encrypted extraction → content comparison flow with the disposable Test Lab on the target device; expected result is 14 PASS, 0 FAIL, 0 SKIP.
 
 M4 is backup-only. It does not restore data or promise cross-ROM compatibility.
 
