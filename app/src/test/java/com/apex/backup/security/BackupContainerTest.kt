@@ -92,6 +92,22 @@ class BackupContainerTest {
     }
 
     @Test
+    fun cancelledStreamBackupDoesNotOpenAnySource() {
+        var opened = false
+        assertThrows(BackupContainerException::class.java) {
+            BackupContainer.createFromStreams(
+                ByteArrayOutputStream(),
+                listOf(BackupStreamSource("app-data/example.app/ce.tar") { _ ->
+                    opened = true
+                    ByteArrayInputStream(byteArrayOf(1, 2, 3))
+                }),
+                "correct horse battery staple".toCharArray()
+            ) { true }
+        }
+        assertTrue(!opened)
+    }
+
+    @Test
     fun streamedSourceRejectsPathTraversalBeforeOpening() {
         var opened = false
         assertThrows(BackupContainerException::class.java) {
