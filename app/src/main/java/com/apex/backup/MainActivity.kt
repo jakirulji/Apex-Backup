@@ -113,6 +113,11 @@ private fun ApexBackupApp() {
     var verifyMessage by remember { mutableStateOf<String?>(null) }
     var verifyUri by remember { mutableStateOf<Uri?>(null) }
 
+    var extractUri by remember { mutableStateOf<Uri?>(null) }
+    var extractPassphrase by remember { mutableStateOf("") }
+    var extractBusy by remember { mutableStateOf(false) }
+    var extractMessage by remember { mutableStateOf<String?>(null) }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
@@ -202,6 +207,13 @@ private fun ApexBackupApp() {
             }.getOrDefault(-1L)
         }
         verifyMessage = if (uri == null) null else "Backup selected. Enter its passphrase and verify."
+    }
+
+    val extractPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        extractUri = uri
+        extractMessage = if (uri == null) null else "Backup selected for extraction test."
     }
 
     LaunchedEffect(verifyBusy) {
@@ -543,6 +555,72 @@ private fun ApexBackupApp() {
                         }
                     }
                     verifyMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+
+                    Divider()
+                    Text("M4 extraction test", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Decrypts the v3 container into a temporary private staging folder, then checks " +
+                            "every extracted entry against the authenticated manifest. This does not restore app data.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    OutlinedButton(
+                        onClick = { extractPicker.launch(arrayOf("*/*")) },
+                        enabled = !extractBusy
+                    ) {
+                        Text("Choose backup to extract")
+                    }
+                    if (extractUri != null) Text("An extraction source is selected.")
+                    OutlinedTextField(
+                        value = extractPassphrase,
+                        onValueChange = { extractPassphrase = it },
+                        label = { Text("Backup passphrase for extraction") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = {
+                            val uri = extractUri
+                            if (uri != null) {
+                                scope.launch {
+                                    extractBusy = true
+                                    extractMessage = "Decrypting and extracting into private staging storage…"
+                                    val password = extractPassphrase.toCharArray()
+                                    val destination = java.io.File(
+                                        context.cacheDir,
+                                        "apex-recovery-" + System.currentTimeMillis()
+                                    )
+                                    try {
+                                        val summary = withContext(Dispatchers.IO) {
+                                            val input = context.contentResolver.openInputStream(uri)
+                                                ?: error("Could not open the selected backup.")
+                                            input.use {
+                                                BackupContainer.extractToDirectory(it, password, destination)
+                                            }
+                                        }
+                                        val extractedFiles = destination.walkTopDown().count { it.isFile }
+                                        extractMessage =
+                                            "Extraction passed: ${summary.fileCount} authenticated entries, " +
+                                            "${formatBytes(summary.totalBytes)}. Materialized files: $extractedFiles. " +
+                                            "Temporary data is stored in app-private cache; no app data was restored."
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        extractMessage = "Extraction failed: ${error.message ?: "unknown error"}"
+                                    } finally {
+                                        password.fill(0.toChar())
+                                        extractPassphrase = ""
+                                        extractBusy = false
+                                    }
+                                }
+                            }
+                        },
+                        enabled = extractUri != null && extractPassphrase.length >= 12 && !extractBusy
+                    ) {
+                        Text("Extract & verify contents")
+                    }
+                    if (extractBusy) CircularProgressIndicator()
+                    extractMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     Text(
                         "Use a unique passphrase and keep it somewhere safe. The app cannot recover " +
                             "a forgotten passphrase. This container currently stores APK files only.",
