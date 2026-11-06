@@ -242,7 +242,7 @@ object TestLabContentComparator {
         val stored = parseOctal(header, 148, 8)
         var sum = 0L
         header.forEachIndexed { index, byte ->
-            sum += if (index in 148..155) 32L else byte.toInt() and 0xff
+            sum += if (index in 148..155) 32L else (byte.toInt() and 0xff).toLong()
         }
         if (sum != stored) throw IOException("TAR header checksum mismatch.")
     }
