@@ -5,8 +5,8 @@
 | M0 — Repository and build foundation | Complete |
 | M1 — Device/root/storage diagnostics | Device-validated; CI verified |
 | M2 — App inventory and APK export | Device-validated; CI verified |
-| M3 — Encrypted repository format | v3 streaming engine; CI and device validation confirmed |
-| M4 — App-data backup | Capture implementation added; CI and disposable-device validation pending |
+| M3 — Encrypted backup container | v3 streaming engine; unified APK + app-data backup flow implemented; CI validation pending |
+| M4 — App-data capture | Root-gated capture integrated into the unified backup flow; disposable-device validation pending |
 | M5 — Same-ROM restore | Not started |
 | M6 — System config | Not started |
 | M7 — Storage targets | Not started |
@@ -51,6 +51,8 @@ M2 APK ZIP export is not a complete application backup.
 - [x] Argon2id key derivation (3 iterations, 64 MiB, parallelism 1).
 - [x] v3 Tink AES-256-GCM-HKDF Streaming AEAD with a fresh wrapped keyset.
 - [x] Stream APK files into the encrypted container without a plaintext intermediate archive.
+- [x] Integrate APK and supported app-data streams into one user-facing encrypted backup action and one `.apexbackup` file.
+- [x] Keep legacy M3 APK-only and M4 app-data containers readable by the existing verification/extraction paths.
 - [x] Authenticated final manifest with file sizes and SHA-256 digests.
 - [x] Reject unsafe paths, duplicate entries, malformed manifests and truncated/tampered streams.
 - [x] Fast wrong-passphrase rejection for v2/v3 before payload reads.
@@ -58,7 +60,7 @@ M2 APK ZIP export is not a complete application backup.
 - [x] CI tests, lint, signed release build and APK signature verification passed.
 - [x] User confirmed device verification, including progress display and wrong-passphrase abort.
 
-M3 currently encrypts APK files only. It does not include private app data, accounts, sessions, permissions or system configuration.
+The unified backup action writes selected APKs and supported app-data TAR streams into one v3 encrypted `.apexbackup` file. The standalone M2 APK ZIP export remains available. Accounts, sessions, permissions and system configuration are not guaranteed.
 
 ## M4 — Root-gated private app-data backup
 
@@ -68,6 +70,7 @@ Design and safety requirements are tracked in [ADR-004: App-data capture](decisi
 - [x] Add isolated `Apex Backup Test Lab` app (`com.apex.backup.testlab`) to generate and verify synthetic CE, DE, database, SharedPreferences, app-specific external, OBB and cache fixtures.
 - [x] Build the Test Lab debug APK separately in CI; publish it as the `apex-backup-test-lab` artifact without changing the signed Apex Backup release artifact.
 - [x] Generalize the container input API so one-shot root-produced streams are encrypted directly without plaintext temporary archives; retain the File convenience API.
+- [x] Remove the separate M3/M4 backup actions; the unified action captures APKs and app data together.
 - [x] Implement a bounded root TAR process with separate bounded stderr draining, exit-code validation, a six-hour hard timeout and cancellation watcher.
 - [x] Add selected-package capture for CE and DE app-private data under Android user 0.
 - [x] Add separately reported app-specific external-data and OBB categories.
@@ -76,7 +79,7 @@ Design and safety requirements are tracked in [ADR-004: App-data capture](decisi
 - [x] Keep capture live and best-effort; never force-stop apps. The UI discloses that databases may change during capture.
 - [x] Report captured, skipped and policy-excluded categories; a TAR process failure aborts the backup instead of recording partial data as captured.
 - [x] Add an in-app TAR content comparator for CE/DE files, SharedPreferences XML, SQLite fixture rows, External/OBB payloads and cache exclusion; document the disposable-device procedure in [M4 testing](M4-TESTING.md).
-- [ ] Run the complete capture → encrypted extraction → content comparison flow with the disposable Test Lab on the target device; expected result is 14 PASS, 0 FAIL, 0 SKIP.
+- [ ] Run the complete unified backup → encrypted extraction → content comparison flow with the disposable Test Lab on the target device; expected result is 14 PASS, 0 FAIL, 0 SKIP.
 
 M4 is backup-only. It does not restore data or promise cross-ROM compatibility.
 
