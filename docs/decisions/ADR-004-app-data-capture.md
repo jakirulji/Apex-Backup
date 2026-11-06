@@ -73,6 +73,18 @@ M4 only captures and verifies data. It must not extract to live app-data directo
 - Numeric UID/GID from the source archive are evidence only. M5 must resolve target ownership from the installed package on the destination ROM.
 - A successful encrypted-container verification proves ciphertext authenticity and payload integrity, not that the app data is compatible or restorable.
 
+## M5 restore security addendum
+
+The M5 implementation is governed by the following additional requirements; these are design/acceptance criteria, not claims that restore code already exists:
+
+- Enforce exact identity binding between the authenticated metadata package key, the package segment in each archive path, and the explicitly selected installed target package. Any missing, malformed, duplicate or mismatched identity must fail closed before writing.
+- Maintain separate per-package staging roots and restore plans. Never share a destination root, infer a package from neighboring entries, or fall back to another package when a target is unavailable.
+- Validate every TAR member after path normalization. Reject absolute paths, traversal, unsafe special files, duplicate/conflicting destinations, and symlink or hard-link targets that can escape the exact package root. Extraction must remain safe in the presence of previously created symlinks.
+- Never execute imported metadata or archive member names as shell commands. Resolve all destination paths from fixed templates and validated package identities.
+- Resolve destination UID/GID and SELinux context from the destination ROM and installed package state; source archive ownership/labels are not authoritative.
+- Verify the entire encrypted container and authenticated manifest before any live destination write. Present a dry-run plan and require explicit confirmation.
+- A mismatch, path collision or package-level failure must not cause writes to another package. Report results independently per package and category.
+
 ## Acceptance criteria
 
 1. A disposable synthetic app with known CE and DE fixture files can be captured through root and included in a v3 container. (Implementation added; device validation pending.)
@@ -81,3 +93,5 @@ M4 only captures and verifies data. It must not extract to live app-data directo
 4. Denied root, missing paths, non-zero TAR exit, timeout, cancellation, stream truncation and low storage produce explicit non-success results. (Root/process failure handling is implemented; full device fault-injection remains pending.)
 5. Package names and archive paths cannot inject shell commands or escape the intended source/destination roots.
 6. CI unit tests and signed release build pass; device validation uses only a disposable synthetic app.
+7. M5 cross-app isolation tests use at least two synthetic packages with unique canary payloads and prove that each package's restored files remain confined to its own destination.
+8. Deliberately mismatched package metadata/archive paths, traversal and link-escape fixtures are rejected before any live destination write.
