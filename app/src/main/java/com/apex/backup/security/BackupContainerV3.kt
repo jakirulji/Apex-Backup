@@ -69,6 +69,10 @@ internal object BackupContainerV3 {
     ): BackupSummary {
         validatePassphrase(passphrase)
         validateSources(sources)
+        if (isCancelled()) {
+            passphrase.fill('\u0000')
+            throw BackupContainerException("Backup was cancelled.")
+        }
         val salt = ByteArray(SALT_LENGTH).also(random::nextBytes)
         val wrapNonce = ByteArray(WRAP_NONCE_LENGTH).also(random::nextBytes)
         val key = deriveKey(passphrase, salt)
