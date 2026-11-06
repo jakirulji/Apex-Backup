@@ -56,9 +56,18 @@ internal object BackupContainerV3 {
             256L * 1024L, 4L * 1024L * 1024L
         ).toInt()
 
-    fun create(destination: OutputStream, files: List<BackupFile>, passphrase: CharArray): BackupSummary {
+    fun create(destination: OutputStream, files: List<BackupFile>, passphrase: CharArray): BackupSummary =
+        createFromStreams(destination, files.map { file ->
+            BackupStreamSource(file.archivePath) { file.source.inputStream() }
+        }, passphrase)
+
+    fun createFromStreams(
+        destination: OutputStream,
+        sources: List<BackupStreamSource>,
+        passphrase: CharArray
+    ): BackupSummary {
         validatePassphrase(passphrase)
-        validateFiles(files)
+        validateSources(sources)
         val salt = ByteArray(SALT_LENGTH).also(random::nextBytes)
         val wrapNonce = ByteArray(WRAP_NONCE_LENGTH).also(random::nextBytes)
         val key = deriveKey(passphrase, salt)
@@ -92,11 +101,11 @@ internal object BackupContainerV3 {
             ZipOutputStream(encrypted).use { zip ->
                 // APKs are ZIP containers already; skip redundant compression to save CPU.
                 zip.setLevel(Deflater.NO_COMPRESSION)
-                files.forEach { file ->
-                    zip.putNextEntry(ZipEntry(file.archivePath).apply { time = 0L })
+                sources.forEach { source ->
+                    zip.putNextEntry(ZipEntry(source.archivePath).apply { time = 0L })
                     val digest = MessageDigest.getInstance("SHA-256")
                     var size = 0L
-                    file.source.inputStream().buffered(ioBufferSize()).use { input ->
+                    source.openStream().buffered(ioBufferSize()).use { input ->
                         val buffer = ByteArray(ioBufferSize())
                         while (true) {
                             val count = input.read(buffer)
@@ -108,7 +117,7 @@ internal object BackupContainerV3 {
                     }
                     zip.closeEntry()
                     totalBytes += size
-                    records += Record(file.archivePath, size, digest.digest().hex())
+                    records += Record(source.archivePath, size, digest.digest().hex())
                 }
                 zip.putNextEntry(ZipEntry(MANIFEST).apply { time = 0L })
                 zip.write(encodeManifest(createdAt, records))
@@ -334,14 +343,15 @@ internal object BackupContainerV3 {
         }
         return out.toByteArray()
     }
-    private fun validateFiles(files: List<BackupFile>) {
-        if (files.isEmpty()) throw BackupContainerException("No files were selected.")
-        if (files.size > MAX_ENTRIES) throw BackupContainerException("Too many files.")
+    private fun validateSources(sources: List<BackupStreamSource>) {
+        if (sources.isEmpty()) throw BackupContainerException("No files were selected.")
+        if (sources.size > MAX_ENTRIES) throw BackupContainerException("Too many files.")
         val seen = HashSet<String>()
-        files.forEach {
-            validatePath(it.archivePath)
-            if (it.archivePath == MANIFEST || !seen.add(it.archivePath)) throw BackupContainerException("Reserved or duplicate archive path.")
-            if (!it.source.isFile || !it.source.canRead()) throw BackupContainerException("Source file is not readable: " + it.archivePath)
+        sources.forEach { source ->
+            validatePath(source.archivePath)
+            if (source.archivePath == MANIFEST || !seen.add(source.archivePath)) {
+                throw BackupContainerException("Reserved or duplicate archive path.")
+            }
         }
     }
     private fun validatePath(path: String) {
