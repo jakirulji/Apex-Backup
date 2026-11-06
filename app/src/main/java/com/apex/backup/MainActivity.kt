@@ -118,6 +118,9 @@ private fun ApexBackupApp() {
     var extractPassphrase by remember { mutableStateOf("") }
     var extractBusy by remember { mutableStateOf(false) }
     var extractMessage by remember { mutableStateOf<String?>(null) }
+    var extractedDirectory by remember { mutableStateOf<java.io.File?>(null) }
+    var contentComparisonBusy by remember { mutableStateOf(false) }
+    var contentComparisonMessage by remember { mutableStateOf<String?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -214,6 +217,8 @@ private fun ApexBackupApp() {
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         extractUri = uri
+        extractedDirectory = null
+        contentComparisonMessage = null
         extractMessage = if (uri == null) null else "Backup selected for extraction test."
     }
 
@@ -599,6 +604,8 @@ private fun ApexBackupApp() {
                                                 BackupContainer.extractToDirectory(it, password, destination)
                                             }
                                         }
+                                        extractedDirectory = destination
+                                        contentComparisonMessage = null
                                         val extractedFiles = destination.walkTopDown().count { it.isFile }
                                         extractMessage =
                                             "Extraction passed: ${summary.fileCount} authenticated entries, " +
@@ -622,6 +629,43 @@ private fun ApexBackupApp() {
                     }
                     if (extractBusy) CircularProgressIndicator()
                     extractMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    OutlinedButton(
+                        onClick = {
+                            val directory = extractedDirectory
+                            if (directory != null) {
+                                scope.launch {
+                                    contentComparisonBusy = true
+                                    contentComparisonMessage = "Reading CE/DE/External/OBB TAR contents and checking known fixtures…"
+                                    try {
+                                        val report = withContext(Dispatchers.IO) {
+                                            com.apex.backup.capture.TestLabContentComparator.compare(directory)
+                                        }
+                                        contentComparisonMessage = buildString {
+                                            append("Test Lab content comparison: ")
+                                            append("${report.passed} PASS • ${report.failed} FAIL • ${report.skipped} SKIP")
+                                            report.checks.forEach { check ->
+                                                append("\\n")
+                                                append(check.status)
+                                                append(" — ")
+                                                append(check.name)
+                                                append(": ")
+                                                append(check.detail)
+                                            }
+                                        }
+                                    } catch (error: Exception) {
+                                        contentComparisonMessage = "Content comparison failed: ${error.message ?: "unknown error"}"
+                                    } finally {
+                                        contentComparisonBusy = false
+                                    }
+                                }
+                            }
+                        },
+                        enabled = extractedDirectory != null && !contentComparisonBusy && !extractBusy
+                    ) {
+                        Text("Compare Test Lab file contents")
+                    }
+                    if (contentComparisonBusy) CircularProgressIndicator()
+                    contentComparisonMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     Text(
                         "Use a unique passphrase and keep it somewhere safe. The app cannot recover " +
                             "a forgotten passphrase. This container can store APKs and supported app-data TAR streams; restore is not implemented.",
