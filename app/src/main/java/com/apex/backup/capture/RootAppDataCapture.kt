@@ -85,6 +85,8 @@ object RootAppDataCapture {
                 ) { file.inputStream() }
             }
 
+            results += CaptureCategoryResult(app.packageName, "CACHE", "EXCLUDED_BY_POLICY")
+            results += CaptureCategoryResult(app.packageName, "CODE_CACHE", "EXCLUDED_BY_POLICY")
             categories.forEach { category ->
                 checkCancelled(isCancelled)
                 val path = category.path(app.packageName)
@@ -197,7 +199,7 @@ object RootAppDataCapture {
 
     private fun openTarStream(path: String, isCancelled: () -> Boolean): InputStream {
         // The only interpolated value is a fixed root path plus a validated package name.
-        val command = "exec toybox tar -cpf - -C '$path' ."
+        val command = "exec toybox tar -cpf - --exclude=./cache --exclude=./code_cache -C '$path' ."
         val process = ProcessBuilder("su", "-c", command).start()
         return RootTarInputStream(process, isCancelled, TAR_TIMEOUT_MILLIS)
     }
@@ -225,11 +227,19 @@ object RootAppDataCapture {
             }
         }.apply { isDaemon = true; start() }
         private val watchdog = Thread {
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
             try {
-                Thread.sleep(timeoutMillis)
-                if (!finished.get() && process.isAlive) {
-                    timedOut.set(true)
-                    process.destroyForcibly()
+                while (!finished.get() && process.isAlive) {
+                    if (isCancelled()) {
+                        process.destroyForcibly()
+                        break
+                    }
+                    if (System.nanoTime() >= deadline) {
+                        timedOut.set(true)
+                        process.destroyForcibly()
+                        break
+                    }
+                    Thread.sleep(200)
                 }
             } catch (_: InterruptedException) {
                 // Normal close/EOF cancels the watchdog.
