@@ -206,7 +206,7 @@ object RootAppDataCapture {
     }
 
     private class RootTarInputStream(
-        process: Process,
+        private val process: Process,
         private val isCancelled: () -> Boolean,
         timeoutMillis: Long
     ) : FilterInputStream(process.inputStream) {
