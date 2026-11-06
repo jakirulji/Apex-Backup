@@ -92,6 +92,59 @@ class BackupContainerTest {
     }
 
     @Test
+    fun v3ExtractionRestoresPayloadOnlyAfterFullVerification() {
+        val payload = ByteArray(128 * 1024) { (it % 239).toByte() }
+        val encrypted = ByteArrayOutputStream()
+        BackupContainer.createFromStreams(
+            encrypted,
+            listOf(BackupStreamSource("app-data/example.app/ce.tar") { _ ->
+                ByteArrayInputStream(payload)
+            }),
+            "correct horse battery staple".toCharArray()
+        )
+        val parent = createTempDir(prefix = "apex-extract-parent")
+        val destination = File(parent, "recovered")
+        try {
+            val summary = BackupContainer.extractToDirectory(
+                ByteArrayInputStream(encrypted.toByteArray()),
+                "correct horse battery staple".toCharArray(),
+                destination
+            )
+            assertEquals(1, summary.fileCount)
+            assertTrue(File(destination, "app-data/example.app/ce.tar").readBytes().contentEquals(payload))
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun wrongPassphraseDoesNotPublishPartialExtraction() {
+        val encrypted = ByteArrayOutputStream()
+        BackupContainer.createFromStreams(
+            encrypted,
+            listOf(BackupStreamSource("apps/example.app/base.apk") { _ ->
+                ByteArrayInputStream("apk payload".toByteArray())
+            }),
+            "correct horse battery staple".toCharArray()
+        )
+        val parent = createTempDir(prefix = "apex-extract-wrong")
+        val destination = File(parent, "recovered")
+        try {
+            assertThrows(BackupContainerException::class.java) {
+                BackupContainer.extractToDirectory(
+                    ByteArrayInputStream(encrypted.toByteArray()),
+                    "wrong passphrase".toCharArray(),
+                    destination
+                )
+            }
+            assertTrue(!destination.exists())
+            assertTrue(parent.listFiles().orEmpty().isEmpty())
+        } finally {
+            parent.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cancelledStreamBackupDoesNotOpenAnySource() {
         var opened = false
         assertThrows(BackupContainerException::class.java) {
