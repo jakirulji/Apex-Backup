@@ -22,6 +22,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -556,7 +557,7 @@ private fun ApexBackupApp() {
                     }
                     verifyMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
 
-                    Divider()
+                    HorizontalDivider()
                     Text("M4 extraction test", style = MaterialTheme.typography.titleSmall)
                     Text(
                         "Decrypts the v3 container into a temporary private staging folder, then checks " +
