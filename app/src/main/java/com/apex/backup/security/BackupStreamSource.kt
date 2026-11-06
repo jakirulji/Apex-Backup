@@ -9,5 +9,5 @@ import java.io.InputStream
 data class BackupStreamSource(
     val archivePath: String,
     val compress: Boolean = true,
-    val openStream: () -> InputStream
+    val openStream: (isCancelled: () -> Boolean) -> InputStream
 )
