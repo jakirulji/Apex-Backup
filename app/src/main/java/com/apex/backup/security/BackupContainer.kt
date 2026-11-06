@@ -76,8 +76,11 @@ object BackupContainer {
     fun createFromStreams(
         destination: OutputStream,
         sources: List<BackupStreamSource>,
-        passphrase: CharArray
-    ): BackupSummary = BackupContainerV3.createFromStreams(destination, sources, passphrase)
+        passphrase: CharArray,
+        isCancelled: () -> Boolean = { false }
+    ): BackupSummary = BackupContainerV3.createFromStreams(
+        destination, sources, passphrase, isCancelled
+    )
 
     fun verify(
         source: InputStream,
