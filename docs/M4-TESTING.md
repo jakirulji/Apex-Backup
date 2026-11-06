@@ -1,6 +1,6 @@
 # M4 disposable-device content validation
 
-This procedure validates the **contents** of the M4 app-data TAR streams. It is separate from the encrypted-container extraction test: extraction verifies authenticated container entries and SHA-256 values, while this comparison opens the extracted TAR files and checks known fixture values.
+This procedure validates the **contents** of the unified backup's app-data TAR streams. It is separate from the encrypted-container extraction test: extraction verifies authenticated container entries and SHA-256 values, while this comparison opens the extracted TAR files and checks known fixture values.
 
 ## Test sequence
 
@@ -8,7 +8,7 @@ This procedure validates the **contents** of the M4 app-data TAR streams. It is 
 2. Open **Apex Backup Test Lab** and tap **Generate synthetic test data**.
 3. Tap **Verify synthetic test data**. Resolve any fixture-generation or verification failure before continuing.
 4. Open Apex Backup. Check root access and grant Magisk permission.
-5. In Installed apps, select **Apex Backup Test Lab** only. Use the M4 action to create an encrypted backup.
+5. In Installed apps, select **Apex Backup Test Lab** only. Use **Create encrypted backup** to create the unified APK + app-data encrypted backup.
 6. In the M4 extraction test, select that `.apexbackup` file, enter the same passphrase, and tap **Extract & verify contents**.
 7. After extraction passes, tap **Compare Test Lab file contents**.
 
