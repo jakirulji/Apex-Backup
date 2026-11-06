@@ -569,13 +569,13 @@ private fun ApexBackupApp() {
                             if (root?.isRoot != true) {
                                 m4Message = "Check root access first and grant Apex Backup permission in Magisk."
                             } else if (chosen.isEmpty()) {
-                                backupMessage = "Select at least one app in Installed apps."
+                                m4Message = "Select at least one app in Installed apps."
                             } else if (backupPassphrase.length < 12 ||
                                 backupPassphrase != backupPassphraseConfirm) {
-                                backupMessage = "Enter matching passphrases of at least 12 characters."
+                                m4Message = "Enter matching passphrases of at least 12 characters."
                             } else {
                                 backupBusy = true
-                                backupMessage = "Checking app-data directories through root…"
+                                m4Message = "Checking app-data directories through root…"
                                 scope.launch {
                                     val job = currentCoroutineContext()[Job]
                                     try {
@@ -596,7 +596,7 @@ private fun ApexBackupApp() {
                                             val excluded = prepared.results.count {
                                                 it.status == "EXCLUDED_BY_POLICY"
                                             }
-                                            backupMessage =
+                                            m4Message =
                                                 "Prepared ${prepared.packageCount} app(s): ${ready} data categories ready, " +
                                                 "${skipped} missing/inaccessible, ${excluded} cache paths excluded. " +
                                                 "Choose where to save the encrypted backup."
@@ -608,7 +608,7 @@ private fun ApexBackupApp() {
                                         throw cancelled
                                     } catch (error: Exception) {
                                         pendingBackupStreams = emptyList()
-                                        backupMessage = "App-data capture preparation failed: ${error.message ?: "unknown error"}"
+                                        m4Message = "App-data capture preparation failed: ${error.message ?: "unknown error"}"
                                     } finally {
                                         backupBusy = false
                                     }
