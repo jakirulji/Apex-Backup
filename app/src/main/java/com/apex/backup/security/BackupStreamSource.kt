@@ -8,6 +8,6 @@ import java.io.InputStream
  */
 data class BackupStreamSource(
     val archivePath: String,
-    val openStream: () -> InputStream,
-    val compress: Boolean = true
+    val compress: Boolean = true,
+    val openStream: () -> InputStream
 )
