@@ -139,8 +139,9 @@ private fun ApexBackupApp() {
     ) { uri: Uri? ->
         if (uri != null) {
             scope.launch {
+                val isM4Backup = pendingBackupStreams.isNotEmpty()
                 backupBusy = true
-                backupMessage = if (pendingBackupStreams.isNotEmpty()) {
+                backupMessage = if (isM4Backup) {
                     "Encrypting APK and app-data streams…"
                 } else {
                     "Encrypting selected APK files…"
@@ -169,10 +170,14 @@ private fun ApexBackupApp() {
                     },
                     onFailure = { "Backup failed: ${it.message ?: "unknown error"}" }
                 )
+                if (isM4Backup) m4Message = backupMessage
                 pendingBackupStreams = emptyList()
                 pendingBackupFiles = emptyList()
             }
         } else {
+            if (pendingBackupStreams.isNotEmpty()) {
+                m4Message = "Destination selection cancelled. No backup was created."
+            }
             pendingBackupStreams = emptyList()
             pendingBackupFiles = emptyList()
         }
