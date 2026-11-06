@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.apex.backup.capture.CaptureCategoryResult
 import com.apex.backup.capture.RootAppDataCapture
 import com.apex.backup.diagnostics.DeviceInfo
 import com.apex.backup.diagnostics.RootDiagnostics
@@ -99,6 +100,7 @@ private fun ApexBackupApp() {
     var backupPassphraseConfirm by remember { mutableStateOf("") }
     var backupBusy by remember { mutableStateOf(false) }
     var backupMessage by remember { mutableStateOf<String?>(null) }
+    var captureDiagnostics by remember { mutableStateOf<List<CaptureCategoryResult>>(emptyList()) }
     var pendingBackupStreams by remember { mutableStateOf<List<BackupStreamSource>>(emptyList()) }
 
     var verifyPassphrase by remember { mutableStateOf("") }
@@ -466,6 +468,7 @@ private fun ApexBackupApp() {
                                 backupMessage = "Enter matching passphrases of at least 12 characters."
                             } else {
                                 backupBusy = true
+                                captureDiagnostics = emptyList()
                                 backupMessage = "Preparing APK and app-data streams through root…"
                                 scope.launch {
                                     val job = currentCoroutineContext()[Job]
@@ -478,6 +481,7 @@ private fun ApexBackupApp() {
                                             ) { job?.isActive != true }
                                         }
                                         pendingBackupStreams = prepared.sources
+                                        captureDiagnostics = prepared.results
                                         val ready = prepared.results.count { it.status == "READY" }
                                         val skipped = prepared.results.count {
                                             it.status == "NOT_PRESENT_OR_INACCESSIBLE"
@@ -512,6 +516,29 @@ private fun ApexBackupApp() {
                     }
                     if (backupBusy) CircularProgressIndicator()
                     backupMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    if (captureDiagnostics.isNotEmpty()) {
+                        InfoCard("Last app-data capture diagnostics") {
+                            captureDiagnostics
+                                .groupBy { it.packageName }
+                                .forEach { (packageName, results) ->
+                                    Text(packageName, style = MaterialTheme.typography.titleSmall)
+                                    results.forEach { result ->
+                                        val statusLabel = when (result.status) {
+                                            "READY" -> "Ready — included in encrypted capture"
+                                            "NOT_PRESENT_OR_INACCESSIBLE" -> "Missing or inaccessible — not captured"
+                                            "EXCLUDED_BY_POLICY" -> "Excluded by policy (cache)"
+                                            else -> result.status
+                                        }
+                                        InfoRow(result.category, statusLabel)
+                                    }
+                                    HorizontalDivider()
+                                }
+                            Text(
+                                "If CE or DE shows “Missing or inaccessible”, that category was not captured. This status does not yet distinguish a missing directory from an access problem.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
 
                     OutlinedButton(
                         onClick = { verifyPicker.launch(arrayOf("*/*")) },
