@@ -93,7 +93,7 @@ internal object BackupContainerV3 {
             val header = prefix + intBytes(wrappedKeyset.size) + wrappedKeyset
             val streamingAead = keyset.getPrimitive(StreamingAead::class.java)
             val createdAt = java.time.Instant.now().toString()
-            val records = ArrayList<Record>(files.size)
+            val records = ArrayList<Record>(sources.size)
             var totalBytes = 0L
             destination.write(header)
             destination.flush()
