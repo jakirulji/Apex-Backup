@@ -74,7 +74,7 @@ class BackupContainerTest {
         val output = ByteArrayOutputStream()
         val created = BackupContainer.createFromStreams(
             output,
-            listOf(BackupStreamSource("app-data/example.app/ce.tar") {
+            listOf(BackupStreamSource("app-data/example.app/ce.tar") { _ ->
                 opened++
                 ByteArrayInputStream(payload)
             }),
@@ -97,7 +97,7 @@ class BackupContainerTest {
         assertThrows(BackupContainerException::class.java) {
             BackupContainer.createFromStreams(
                 ByteArrayOutputStream(),
-                listOf(BackupStreamSource("../escape.tar") {
+                listOf(BackupStreamSource("../escape.tar") { _ ->
                     opened = true
                     ByteArrayInputStream(byteArrayOf(1))
                 }),
