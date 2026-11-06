@@ -624,7 +624,7 @@ private fun ApexBackupApp() {
                     extractMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     Text(
                         "Use a unique passphrase and keep it somewhere safe. The app cannot recover " +
-                            "a forgotten passphrase. This container currently stores APK files only.",
+                            "a forgotten passphrase. This container can store APKs and supported app-data TAR streams; restore is not implemented.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
