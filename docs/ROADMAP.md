@@ -85,13 +85,27 @@ M4 is backup-only. It does not restore data or promise cross-ROM compatibility.
 
 ## M5 — Same-ROM restore
 
-- [ ] Verify the entire container before extracting or changing device state.
-- [ ] Generate a dry-run plan and show package/signature/version compatibility.
-- [ ] Resolve destination UID/GID from the target PackageManager; never reuse source numeric ownership blindly.
-- [ ] Reject unsafe paths and symlinks escaping the destination app-data root.
-- [ ] Restore only scoped app data through a root-gated, package-aware process.
-- [ ] Require explicit confirmation and provide per-package result reporting.
-- [ ] Test only with synthetic app data on a controlled target.
+### Restore safety and isolation requirements
+
+- [ ] Verify the entire encrypted container, authenticated manifest and all payload digests before extracting files or changing device state.
+- [ ] Build a dry-run plan and show package, signing-certificate and version compatibility before any write.
+- [ ] For every app-data archive, require its archive path package segment, authenticated metadata package key, and selected target package to match exactly. Reject missing, malformed, duplicate or conflicting identity records.
+- [ ] Keep each app's APK and CE/DE/External/OBB archives in a package-scoped restore plan and staging area; never infer one package from another package's metadata or fall back to a shared destination.
+- [ ] Treat archive contents as untrusted: reject absolute paths, traversal, unsafe special files and symlink/hard-link targets that escape the exact destination app-data root. Validate paths after normalization and account for symlink traversal during extraction.
+- [ ] Resolve the destination UID/GID and SELinux context from the target ROM/package installation; never blindly apply source numeric ownership or labels.
+- [ ] Restore only explicitly selected, compatible packages through a root-gated, package-aware process. Imported metadata and TAR members must never become shell commands or arbitrary root paths.
+- [ ] Require explicit confirmation of the dry-run plan, preserve cancellation/error handling, and report success/failure independently for every package.
+- [ ] On any package identity mismatch or cross-package path collision, reject that package before writing; no fallback or partial cross-app restore is allowed.
+- [ ] Test only with synthetic app data on a controlled disposable target, never the user's daily-driver data.
+
+### M5 cross-app isolation acceptance tests
+
+- [ ] Create at least two synthetic packages with distinct canary files in CE, DE, External and OBB data; restore them and prove each canary appears only under its matching package.
+- [ ] Tamper with or construct mismatched archive-path/metadata/target-package identities and assert deterministic rejection before any destination write.
+- [ ] Include traversal, absolute-path, symlink-escape, hard-link and duplicate-destination fixtures; assert no file is written outside the intended package root.
+- [ ] Verify a failed package cannot redirect, overwrite or contaminate another package's staged or live data.
+- [ ] Verify dry-run output identifies each package and each category separately, including skipped/unsupported categories.
+- [ ] Record per-test results and require zero cross-app writes for M5 acceptance.
 
 ## Later milestones
 
