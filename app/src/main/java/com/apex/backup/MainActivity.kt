@@ -168,6 +168,8 @@ private fun ApexBackupApp() {
                     },
                     onFailure = { "Backup failed: ${it.message ?: "unknown error"}" }
                 )
+                pendingBackupStreams = emptyList()
+                pendingBackupFiles = emptyList()
             }
         } else {
             pendingBackupStreams = emptyList()
@@ -437,25 +439,33 @@ private fun ApexBackupApp() {
                                 backupMessage = "Checking app-data directories through root…"
                                 scope.launch {
                                     val job = currentCoroutineContext()[Job]
-                                    val prepared = withContext(Dispatchers.IO) {
-                                        RootAppDataCapture.prepare(
-                                            chosen,
-                                            context.packageManager,
-                                            device
-                                        ) { job?.isActive != true }
-                                    }
-                                    backupBusy = false
-                                    if (prepared.sources.isNotEmpty()) {
-                                        pendingBackupStreams = prepared.sources
-                                        pendingBackupFiles = emptyList()
-                                        val ready = prepared.results.count { it.status == "READY" }
-                                        val skipped = prepared.results.size - ready
-                                        backupMessage =
-                                            "Prepared ${prepared.packageCount} app(s): ${ready} data categories ready, " +
-                                            "${skipped} missing/inaccessible. Choose where to save the encrypted backup."
-                                        encryptedBackupLauncher.launch(
-                                            "Apex-App-Data-${System.currentTimeMillis()}.apexbackup"
-                                        )
+                                    try {
+                                        val prepared = withContext(Dispatchers.IO) {
+                                            RootAppDataCapture.prepare(
+                                                chosen,
+                                                context.packageManager,
+                                                device
+                                            ) { job?.isActive != true }
+                                        }
+                                        if (prepared.sources.isNotEmpty()) {
+                                            pendingBackupStreams = prepared.sources
+                                            pendingBackupFiles = emptyList()
+                                            val ready = prepared.results.count { it.status == "READY" }
+                                            val skipped = prepared.results.size - ready
+                                            backupMessage =
+                                                "Prepared ${prepared.packageCount} app(s): ${ready} data categories ready, " +
+                                                "${skipped} missing/inaccessible. Choose where to save the encrypted backup."
+                                            encryptedBackupLauncher.launch(
+                                                "Apex-App-Data-${System.currentTimeMillis()}.apexbackup"
+                                            )
+                                        }
+                                    } catch (cancelled: CancellationException) {
+                                        throw cancelled
+                                    } catch (error: Exception) {
+                                        pendingBackupStreams = emptyList()
+                                        backupMessage = "App-data capture preparation failed: ${error.message ?: "unknown error"}"
+                                    } finally {
+                                        backupBusy = false
                                     }
                                 }
                             }
