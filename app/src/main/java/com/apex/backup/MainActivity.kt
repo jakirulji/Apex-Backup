@@ -484,7 +484,10 @@ private fun ApexBackupApp() {
                                         captureDiagnostics = prepared.results
                                         val ready = prepared.results.count { it.status == "READY" }
                                         val skipped = prepared.results.count {
-                                            it.status == "NOT_PRESENT_OR_INACCESSIBLE"
+                                            it.status in setOf(
+                                                "ROOT_NOT_GRANTED", "DIRECTORY_MISSING",
+                                                "DIRECTORY_NOT_READABLE", "PROBE_ERROR"
+                                            )
                                         }
                                         val excluded = prepared.results.count {
                                             it.status == "EXCLUDED_BY_POLICY"
@@ -525,16 +528,25 @@ private fun ApexBackupApp() {
                                     results.forEach { result ->
                                         val statusLabel = when (result.status) {
                                             "READY" -> "Ready — included in encrypted capture"
-                                            "NOT_PRESENT_OR_INACCESSIBLE" -> "Missing or inaccessible — not captured"
+                                            "ROOT_NOT_GRANTED" -> "Root was not granted (UID is not 0)"
+                                            "DIRECTORY_MISSING" -> "Directory does not exist"
+                                            "DIRECTORY_NOT_READABLE" -> "Root cannot read this directory"
+                                            "PROBE_ERROR" -> "Directory check command failed"
                                             "EXCLUDED_BY_POLICY" -> "Excluded by policy (cache)"
                                             else -> result.status
                                         }
                                         InfoRow(result.category, statusLabel)
+                                        result.sourcePath?.let {
+                                            Text("Path: $it", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        result.diagnostic?.let {
+                                            Text("Probe: $it", style = MaterialTheme.typography.bodySmall)
+                                        }
                                     }
                                     HorizontalDivider()
                                 }
                             Text(
-                                "If CE or DE shows “Missing or inaccessible”, that category was not captured. This status does not yet distinguish a missing directory from an access problem.",
+                                "CE/DE paths come from Android PackageManager. Probe output records root UID, directory existence, read access and ls details; failed categories are not captured.",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
