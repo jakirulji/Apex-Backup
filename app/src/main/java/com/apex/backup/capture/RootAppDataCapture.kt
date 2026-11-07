@@ -1,5 +1,6 @@
 package com.apex.backup.capture
 
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
@@ -20,7 +21,9 @@ data class CaptureCategoryResult(
     val packageName: String,
     val category: String,
     val status: String,
-    val archivePath: String? = null
+    val archivePath: String? = null,
+    val sourcePath: String? = null,
+    val diagnostic: String? = null
 )
 
 data class PreparedAppDataCapture(
@@ -40,13 +43,18 @@ object RootAppDataCapture {
     private const val TAR_TIMEOUT_MILLIS = 6L * 60L * 60L * 1000L
     private const val MAX_STDERR_BYTES = 16 * 1024
 
-    private data class Category(val name: String, val path: (String) -> String)
+    private data class Category(val name: String)
 
     private val categories = listOf(
-        Category("CE", { pkg -> "/data/user/0/$pkg" }),
-        Category("DE", { pkg -> "/data/user_de/0/$pkg" }),
-        Category("EXTERNAL", { pkg -> "/storage/emulated/0/Android/data/$pkg" }),
-        Category("OBB", { pkg -> "/storage/emulated/0/Android/obb/$pkg" })
+        Category("CE"),
+        Category("DE"),
+        Category("EXTERNAL"),
+        Category("OBB")
+    )
+
+    private data class DirectoryProbe(
+        val status: String,
+        val detail: String
     )
 
     fun prepare(
@@ -89,20 +97,25 @@ object RootAppDataCapture {
             results += CaptureCategoryResult(app.packageName, "CODE_CACHE", "EXCLUDED_BY_POLICY")
             categories.forEach { category ->
                 checkCancelled(isCancelled)
-                val path = category.path(app.packageName)
-                val present = probeDirectory(path, isCancelled)
+                val appInfo = requireNotNull(packageInfo.applicationInfo) {
+                    "Application information is unavailable for ${app.packageName}."
+                }
+                val path = resolveCategoryPath(category.name, app.packageName, appInfo)
+                val probe = probeDirectory(path, isCancelled)
                 val archivePath = "app-data/${app.packageName}/${category.name.lowercase()}.tar"
-                if (present) {
+                if (probe.status == "READY") {
                     sources += BackupStreamSource(archivePath) { cancelled ->
                         openTarStream(path, cancelled)
                     }
                     results += CaptureCategoryResult(
-                        app.packageName, category.name, "READY", archivePath
+                        app.packageName, category.name, "READY", archivePath, path, probe.detail
                     )
                     dataCategoryCount++
                 } else {
                     results += CaptureCategoryResult(
-                        app.packageName, category.name, "NOT_PRESENT_OR_INACCESSIBLE"
+                        app.packageName, category.name, probe.status,
+                        sourcePath = path,
+                        diagnostic = probe.detail
                     )
                 }
             }
@@ -160,19 +173,48 @@ object RootAppDataCapture {
         }.sorted().joinToString(",")
     }
 
-    private fun probeDirectory(path: String, isCancelled: () -> Boolean): Boolean {
+    private fun resolveCategoryPath(
+        category: String,
+        packageName: String,
+        appInfo: ApplicationInfo
+    ): String = when (category) {
+        "CE" -> appInfo.credentialProtectedDataDir
+            ?: appInfo.dataDir
+            ?: "/data/user/0/$packageName"
+        "DE" -> appInfo.deviceProtectedDataDir
+            ?: "/data/user_de/0/$packageName"
+        "EXTERNAL" -> "/storage/emulated/0/Android/data/$packageName"
+        "OBB" -> "/storage/emulated/0/Android/obb/$packageName"
+        else -> throw IllegalArgumentException("Unsupported app-data category.")
+    }
+
+    private fun shellQuote(value: String): String =
+        "'" + value.replace("'", "'\\''") + "'"
+
+    private fun probeDirectory(path: String, isCancelled: () -> Boolean): DirectoryProbe {
         checkCancelled(isCancelled)
-        val command = "test -d '$path' && test -r '$path'"
-        val process = ProcessBuilder("su", "-c", command).start()
-        val stderr = ByteArrayOutputStream()
+        val quotedPath = shellQuote(path)
+        val command = """
+            printf 'uid='
+            id -u
+            if [ -d $quotedPath ]; then echo dir=present; else echo dir=missing; fi
+            if [ -r $quotedPath ]; then echo readable=yes; else echo readable=no; fi
+            ls -ld $quotedPath
+        """.trimIndent()
+        val process = ProcessBuilder("su", "-c", command)
+            .redirectErrorStream(true)
+            .start()
+        val output = ByteArrayOutputStream()
         val drain = Thread {
-            process.errorStream.use { input ->
+            process.inputStream.use { input ->
                 val buffer = ByteArray(1024)
                 while (true) {
                     val count = input.read(buffer)
                     if (count < 0) break
-                    if (stderr.size() < MAX_STDERR_BYTES) {
-                        stderr.write(buffer, 0, minOf(count, MAX_STDERR_BYTES - stderr.size()))
+                    synchronized(output) {
+                        if (output.size() < MAX_STDERR_BYTES) {
+                            output.write(buffer, 0, minOf(count, MAX_STDERR_BYTES - output.size()))
+                        }
                     }
                 }
             }
@@ -184,15 +226,28 @@ object RootAppDataCapture {
                 checkCancelled(isCancelled)
                 if (System.nanoTime() >= deadline) {
                     process.destroyForcibly()
-                    throw IOException("Root directory check timed out.")
+                    throw IOException("Root directory diagnostic timed out.")
                 }
             }
             drain.join(1000)
-            return process.exitValue() == 0
+            val detail = synchronized(output) {
+                output.toString(StandardCharsets.UTF_8.name()).trim().take(1000)
+            }
+            val uid = Regex("(?m)^uid=(\\d+)\\s*$").find(detail)?.groupValues?.get(1)
+            val directoryPresent = Regex("(?m)^dir=present\\s*$").containsMatchIn(detail)
+            val readable = Regex("(?m)^readable=yes\\s*$").containsMatchIn(detail)
+            val status = when {
+                uid != "0" -> "ROOT_NOT_GRANTED"
+                !directoryPresent -> "DIRECTORY_MISSING"
+                !readable -> "DIRECTORY_NOT_READABLE"
+                process.exitValue() != 0 -> "PROBE_ERROR"
+                else -> "READY"
+            }
+            return DirectoryProbe(status, detail.ifBlank { "No diagnostic output; exit=${process.exitValue()}." })
         } catch (error: InterruptedException) {
             process.destroyForcibly()
             Thread.currentThread().interrupt()
-            throw InterruptedIOException("Root directory check interrupted.")
+            throw InterruptedIOException("Root directory diagnostic interrupted.")
         } finally {
             if (process.isAlive) process.destroyForcibly()
         }
@@ -333,7 +388,7 @@ object RootAppDataCapture {
         val categoryJson = results.joinToString(",") { item ->
             val finalStatus = when (item.status) {
                 "READY" -> "captured"
-                "NOT_PRESENT_OR_INACCESSIBLE" -> "skipped"
+                "ROOT_NOT_GRANTED", "DIRECTORY_MISSING", "DIRECTORY_NOT_READABLE", "PROBE_ERROR" -> "skipped"
                 "EXCLUDED_BY_POLICY" -> "excluded"
                 else -> "unsupported"
             }
@@ -343,7 +398,11 @@ object RootAppDataCapture {
                 "status" to finalStatus
             )
             when (item.status) {
-                "NOT_PRESENT_OR_INACCESSIBLE" -> fields["reason"] = "not_present_or_inaccessible"
+                "ROOT_NOT_GRANTED", "DIRECTORY_MISSING", "DIRECTORY_NOT_READABLE", "PROBE_ERROR" -> {
+                    fields["reason"] = item.status.lowercase()
+                    item.sourcePath?.let { fields["source_path"] = it }
+                    item.diagnostic?.let { fields["diagnostic"] = it }
+                }
                 "EXCLUDED_BY_POLICY" -> fields["reason"] = "regenerable_cache_policy"
             }
             item.archivePath?.let { fields["archive_path"] = it }
