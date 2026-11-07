@@ -178,8 +178,7 @@ object RootAppDataCapture {
         packageName: String,
         appInfo: ApplicationInfo
     ): String = when (category) {
-        "CE" -> appInfo.credentialProtectedDataDir
-            ?: appInfo.dataDir
+        "CE" -> appInfo.dataDir
             ?: "/data/user/0/$packageName"
         "DE" -> appInfo.deviceProtectedDataDir
             ?: "/data/user_de/0/$packageName"
